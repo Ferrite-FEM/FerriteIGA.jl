@@ -31,12 +31,12 @@ Data for one cell, from `getcoordinates`.
 `xb`, `wb` are the Bézier points and weights.
 `beo` is the extraction operator.
 """
-struct BezierCoords{dim_s,T} 
-    xb   ::Vector{Vec{dim_s,T}}
-    wb   ::Vector{T}
-    x    ::Vector{Vec{dim_s,T}}
-    w    ::Vector{T}
-    beo  ::Base.RefValue{ BezierExtractionOperator{T} }
+mutable struct BezierCoords{dim_s,T} 
+    const xb::Vector{Vec{dim_s,T}}
+    const wb::Vector{T}
+    const x::Vector{Vec{dim_s,T}}
+    const w::Vector{T}
+    beo::Optional{BezierExtractionOperator{T}}
 end
 
 function resize_bezier_coord!(X::BezierCoords, N::Int)
@@ -47,7 +47,7 @@ function resize_bezier_coord!(X::BezierCoords, N::Int)
     resize!(w,  N)
 end
 
-zero_bezier_coord(dim, T, nnodes) = BezierCoords{dim,T}(zeros(Vec{dim,T}, nnodes), zeros(T, nnodes), zeros(Vec{dim,T}, nnodes), zeros(T, nnodes), Base.RefValue(diagonal_beo(1)))
+zero_bezier_coord(dim, T, nnodes) = BezierCoords{dim,T}(zeros(Vec{dim,T}, nnodes), zeros(T, nnodes), zeros(Vec{dim,T}, nnodes), zeros(T, nnodes), nothing)
 
 #Base.zero(Type{BezierCoords{dim,T}}) where {dim,T} = BezierCoords
 
