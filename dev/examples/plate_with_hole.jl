@@ -1,4 +1,4 @@
-using Ferrite, IGA, LinearAlgebra
+using Ferrite, FerriteIGA, LinearAlgebra
 
 function integrate_element!(ke::AbstractMatrix, C::SymmetricTensor{4,2}, cv)
     n_basefuncs = getnbasefunctions(cv)
@@ -141,9 +141,6 @@ dh = DofHandler(grid)
 add!(dh, :u, ip_u)
 close!(dh);
 
-ae = zeros(ndofs(dh))
-IGA.apply_analytical_iga!(ae, dh, :u, x -> x);
-
 ch = ConstraintHandler(dh)
 dbc1 = Dirichlet(:u, getfacetset(grid, "bot"), (x, t) -> 0.0, 2)
 dbc2 = Dirichlet(:u, getfacetset(grid, "right"), (x, t) -> 0.0, 1)
@@ -161,7 +158,7 @@ u = K \ f;
 
 cellstresses = calculate_stress(dh, cv, stiffmat, u);
 
-IGA.VTKIGAFile("plate_with_hole.vtu", grid) do vtk
+VTKIGAFile("plate_with_hole.vtu", grid) do vtk
     write_solution(vtk, dh, u)
     #IGA.write_projections(vtk, projector, σ_nodes, "σ")
 end;

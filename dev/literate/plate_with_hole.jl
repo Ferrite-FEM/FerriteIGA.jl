@@ -12,7 +12,7 @@
 #md #     It is also expected that the reader is familiar with the Ferrite package. In particular Ferrite.DofHandler and Ferrite.CellValues.
 
 # Start by loading the necessary packages
-using Ferrite, IGA, LinearAlgebra
+using Ferrite, FerriteIGA, LinearAlgebra
 
 # Next we define the functions for the integration of the element stiffness matrix and traction force.
 # These functions will be the same as for a normal finite elment problem, but
@@ -141,7 +141,7 @@ function calculate_stress(dh, cv::BezierCellValues, C::SymmetricTensor{4,2}, u::
 end;
 
 # Now we have all the parts needed to solve the problem.
-# We begin by generating the mesh. IGA.jl includes a couple of different functions that can generate different nurbs patches.
+# We begin by generating the mesh. FerriteIGA.jl includes a couple of different functions that can generate different nurbs patches.
 # In this example, we will generate the patch called "plate with hole". Note, currently this function can only generate the patch with second order basefunctions. 
 
 order = 2 # order of the NURBS
@@ -176,9 +176,6 @@ dh = DofHandler(grid)
 add!(dh, :u, ip_u)
 close!(dh);
 
-ae = zeros(ndofs(dh))
-IGA.apply_analytical_iga!(ae, dh, :u, x -> x);
-
 # Add two symmetry boundary condintions. Bottom face should only be able to move in x-direction, and the right boundary should only be able to move in y-direction
 ch = ConstraintHandler(dh)
 dbc1 = Dirichlet(:u, getfacetset(grid, "bot"), (x, t) -> 0.0, 2)
@@ -207,7 +204,7 @@ cellstresses = calculate_stress(dh, cv, stiffmat, u);
 # projector = L2Projector(ip_u, grid)
 # σ_nodes = project(projector, cellstresses, qr_cell)
 
-IGA.VTKIGAFile("plate_with_hole.vtu", grid) do vtk
+VTKIGAFile("plate_with_hole.vtu", grid) do vtk
     write_solution(vtk, dh, u)
     #IGA.write_projections(vtk, projector, σ_nodes, "σ")
 end;
