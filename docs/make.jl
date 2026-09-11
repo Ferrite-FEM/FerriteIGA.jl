@@ -27,7 +27,7 @@ makedocs(
     repo = "<repository url>"
 )=#
 deploydocs(
-    repo = "github.com/ferrite-fem/FerriteIGA.jl.git",
+    repo = "github.com/Ferrite-FEM/FerriteIGA.jl.git",
     push_preview=true,
     devbranch = "master"
 )
