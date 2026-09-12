@@ -1,5 +1,3 @@
-export BSplineBasis
-
 """
 BSplineBasis{dim,T,order} <: Ferrite.ScalarInterpolation{RefHypercube{dim}, order}
     

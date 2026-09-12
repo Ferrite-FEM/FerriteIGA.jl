@@ -1,28 +1,27 @@
 module FerriteIGA
 
-using Reexport
-
+using Reexport: @reexport
 @reexport using Tensors
 @reexport using Ferrite
+
 using Ferrite: 
     AbstractRefShape, RefHypercube, RefLine, RefQuadrilateral, RefHexahedron, getnbasefunctions,
     VectorInterpolation, VectorizedInterpolation,
     FunctionValues, GeometryMapping, MappingValues, ValuesUpdateFlags
-
 using OrderedCollections:
     OrderedSet
+using WriteVTK:
+    WriteVTK, VTKCellTypes
+using LinearAlgebra: 
+    LinearAlgebra, Diagonal, norm, qr, ⋅
+using SparseArrays: 
+    SparseArrays, SparseMatrixCSC, SparseVector, sparsevec, sparse
 
-using WriteVTK
-using LinearAlgebra
-using StaticArrays
-import SparseArrays
+const Optional{T} = Union{T, Nothing}
+const BezierExtractionOperator{T} = Vector{SparseArrays.SparseVector{T,Int}}
+const CoordsAndWeight{sdim,T} = Tuple{ <: AbstractVector{Vec{sdim,T}}, <: AbstractVector{T}}
 
-export IGAInterpolation
-export BezierExtractionOperator
-export BezierCell
-export BezierCoords
-export VTKIGAFile
-export IGACellCache, IGAFaceCache
+include("exports.jl")
 
 const Optional{T} = Union{T, Nothing}
 const BezierExtractionOperator{T} = Vector{SparseArrays.SparseVector{T,Int}}

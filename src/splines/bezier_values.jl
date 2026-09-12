@@ -1,5 +1,3 @@
-export BezierCellValues, BezierFacetValues, set_bezier_operator!
-
 function Ferrite.default_geometric_interpolation(::IGAInterpolation{shape, order}) where {order, dim, shape <: AbstractRefShape{dim}}
     return VectorizedInterpolation{dim}(IGAInterpolation{shape, order}())
 end

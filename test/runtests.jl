@@ -1,4 +1,5 @@
 using FerriteIGA
+using FerriteIGA: Bernstein, BSplineBasis
 using Ferrite
 using Test
 

@@ -1,8 +1,4 @@
 
-export compute_bezier_extraction_operators, compute_bezier_points, compute_bezier_points!
-export bezier_extraction_to_vectors
-export combine_beo, diagonal_beo
-
 function bezier_extraction_to_vectors(Ce::AbstractVector{<:AbstractMatrix})
     T = Float64
     nbe = length(Ce)

@@ -1,4 +1,3 @@
-export Bernstein
 
 """
     Bernstein{shape, order}()
