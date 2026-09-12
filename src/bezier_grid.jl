@@ -1,5 +1,13 @@
 export BezierGrid, getweights, getweights!, get_extraction_operator, get_bezier_coordinates, get_bezier_coordinates!, get_nurbs_coordinates
 
+"""
+    BezierGrid(mesh::NURBSMesh)
+    BezierGrid(grid::Grid)
+
+Ferrite grid with NURBS weights and an extraction operator on each cell.
+`BezierGrid(mesh)` builds this from a NURBS patch.
+`BezierGrid(grid)` wraps an ordinary Ferrite grid.
+"""
 struct BezierGrid{dim,C<:Ferrite.AbstractCell,T<:Real} <: Ferrite.AbstractGrid{dim}
 	grid    ::Ferrite.Grid{dim,C,T}
 	weights ::Vector{Float64}
@@ -175,6 +183,11 @@ function get_nurbs_coordinates(grid::BezierGrid{dim,C,T}, cell::Int) where {dim,
     return [grid.nodes[i].x for i in nodeidx]::Vector{Vec{dim,T}}
 end
 
+"""
+	get_extraction_operator(grid::BezierGrid, cellid)
+
+Bézier extraction operator for cell `cellid`.
+"""
 function get_extraction_operator(grid::BezierGrid, cellid::Int)
 	return grid.beo[cellid]
 end

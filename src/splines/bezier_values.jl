@@ -10,6 +10,12 @@ function Ferrite.default_geometric_interpolation(::Bernstein{shape, order}) wher
     return VectorizedInterpolation{dim}(Bernstein{shape, order}())
 end
 
+"""
+    BezierCellValues(qr, ip)
+
+Shape values on an IGA cell. Call `reinit!(cv, coords)` first. Then `shape_value` and
+`shape_gradient` return NURBS values.
+"""
 struct BezierCellValues{FV, GM, QR, T} <: Ferrite.AbstractCellValues
     bezier_values::FV # FunctionValues
     tmp_values::FV    # FunctionValues
@@ -22,6 +28,11 @@ struct BezierCellValues{FV, GM, QR, T} <: Ferrite.AbstractCellValues
     current_w::Vector{T}
 end
 
+"""
+    BezierFacetValues(fqr, ip)
+
+Shape values on an IGA face. Call `reinit!(fv, coords, faceid)` first.
+"""
 struct BezierFacetValues{FV, GM, FQR, dim, T, V_FV<:AbstractVector{FV}, V_GM<:AbstractVector{GM}} <: Ferrite.AbstractFacetValues
     bezier_values::V_FV # FunctionValues
     tmp_values::V_FV    # FunctionValues

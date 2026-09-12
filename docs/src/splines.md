@@ -1,46 +1,49 @@
 # Splines
 
+Isogeometric analysis uses B-splines and NURBS as the discrete approximation basis. A one-dimensional spline is built from a knot vector and a polynomial degree. Surfaces and solids are products of these one-dimensional functions. Control points set the shape. NURBS add a positive weight at each control point, which is what allows exact circles and other conic sections.
+
+The patch type is a `NURBSMesh`. After Bézier extraction, see [Bezier extraction](@ref), assembly follows the [Ferrite documentation](https://ferrite-fem.github.io/Ferrite.jl/stable/).
+
 ## B-splines
 
-The univariate **B-spline** basis is defined on a knot vector of length $n+p+1$, a non-decreasing sequence of parametric coordinates
-$\Xi = [\xi_1, \ldots, \xi_{n+p+1}]$, where $p$ is the polynomial degree of the basis and $n$ is the number of basis functions.
-At an **interior** knot value of multiplicity $m$ with $1 \leq m \leq p+1$, any spline curve of degree $p$ constructed from this knot vector is $C^{p-m}$-continuous across that knot: derivatives of order $0,\ldots,p-m$ agree from the left and right, while derivatives of order greater than $p-m$ may jump.
-Endpoint multiplicities and the **open knot-vector** convention are treated in the section on open knot vectors below.
-The B-splines are defined recursively through Cox-de-Boor recursion:
+A **knot vector** of degree $p$ with $n$ basis functions is a sequence of length $n+p+1$,
 
 ```math
-\hat{N}_{A,p}(\xi) = \frac{\xi - \xi_A}{\xi_{A+p} - \xi_A} \, \hat{N}_{A,p-1}(\xi) + \frac{\xi_{A+p+1} - \xi}{\xi_{A+p+1} - \xi_{A+1}} \, \hat{N}_{A+1,p-1}(\xi)
+\Xi = [\xi_1, \ldots, \xi_{n+p+1}].
 ```
 
-with the piecewise constant case:
+Each interval $\xi_i < \xi_{i+1}$ is one element. Repeating a knot value raises its multiplicity $m$. At an interior knot of multiplicity $m$, with $1 \leq m \leq p+1$, a spline of degree $p$ is $C^{p-m}$. Derivatives through order $p-m$ match from the left and right. Higher derivatives may jump. A simple knot ($m=1$) gives $C^{p-1}$ continuity across that element boundary.
+
+The B-spline basis is defined by the Cox–de Boor recursion. For $p=0$,
 
 ```math
 \hat{N}_{A,0}(\xi) =
 \begin{cases}
 1 & \text{if } \xi_A \leq \xi < \xi_{A+1}, \\
-0 & \text{otherwise}.
+0 & \text{otherwise},
 \end{cases}
 ```
 
-With the usual convention at the right end of the parametric domain so that the basis forms a partition of unity.
-
-B-spline basis functions are used to represent geometry (curves, surfaces, and solids). For example, a B-spline surface has the form:
+The functions sum to one, $\sum_A \hat{N}_{A,p}(\xi) = 1$, with the last knot interval closed on the right. For $p \geq 1$,
 
 ```math
-\boldsymbol{S}(\xi,\eta) = \sum_{A=1}^{N} \boldsymbol{X}_A \, N_A(\xi, \eta)
+\hat{N}_{A,p}(\xi) = \frac{\xi - \xi_A}{\xi_{A+p} - \xi_A} \, \hat{N}_{A,p-1}(\xi) + \frac{\xi_{A+p+1} - \xi}{\xi_{A+p+1} - \xi_{A+1}} \, \hat{N}_{A+1,p-1}(\xi).
 ```
 
-where $\boldsymbol{X}_A$ are the control points and $N_A$ is a tensor product of univariate B-splines in the two parametric directions:
+
+A B-spline surface is a product of one-dimensional bases. With control points $\boldsymbol{X}_A$ and global index $A$ for the pair $(i,j)$,
 
 ```math
+\boldsymbol{S}(\xi,\eta) = \sum_{A=1}^{N} \boldsymbol{X}_A \, N_A(\xi, \eta),
+\qquad
 N_A(\xi, \eta) = \hat{N}_{i}^{(\xi)}(\xi) \, \hat{N}_{j}^{(\eta)}(\eta).
 ```
 
-Here $\hat{N}_{i}^{(\xi)}$ and $\hat{N}_{j}^{(\eta)}$ use knot vectors $\Xi^{(\xi)}$ and $\Xi^{(\eta)}$ (and degrees $p_\xi$, $p_\eta$) associated with the index pair $(i,j)$ that corresponds to the global basis index $A$.
+The factors $\hat{N}_{i}^{(\xi)}$ and $\hat{N}_{j}^{(\eta)}$ use knot vectors $\Xi^{(\xi)}$ and $\Xi^{(\eta)}$ and degrees $p_\xi$, $p_\eta$.
 
 ### Open knot vectors
 
-A knot vector $\Xi = [\xi_1, \ldots, \xi_{n+p+1}]$ is an **open knot vector** (for degree $p$) when the first and last knots each have multiplicity $p+1$:
+A knot vector is open for degree $p$ when the first and last values each have multiplicity $p+1$,
 
 ```math
 \xi_1 = \cdots = \xi_{p+1},
@@ -48,47 +51,65 @@ A knot vector $\Xi = [\xi_1, \ldots, \xi_{n+p+1}]$ is an **open knot vector** (f
 \xi_{n+1} = \cdots = \xi_{n+p+1}.
 ```
 
-Equivalently, the parametric interval begins and ends at values $u_0 := \xi_1$ and $u_1 := \xi_{n+p+1}$ with maximal end multiplicity. Interior entries $\xi_{p+2}, \ldots, \xi_n$ may repeat but each interior knot typically has multiplicity at most $p$ so that the basis stays well posed (at least 1st order continuity).
-
-This is the standard choice in CAD and IGA, since an open knot vector makes the first and last B-spline basis functions behave like endpoint interpolants, so the curve or surface passes through the first and last rows of the control net. The active parameter range is usually taken as $\xi \in [\xi_{p+1}, \xi_{n+1}] = [u_0, u_1]$, i.e. between the first and last distinct knots.
+This is the standard choice in CAD and IGA. The first and last basis functions equal 1 at the ends, so the curve or surface passes through the first and last rows of control points. The active parameter range is $\xi \in [\xi_{p+1}, \xi_{n+1}]$, between the first and last distinct knots.
 
 ## NURBS
 
-**Non-uniform rational B-spline (NURBS)** curves augment the B-spline setup with a set of weights $w_A > 0$.
-One introduces the weight function (denominator in parametric space):
+A **non-uniform rational B-spline** (NURBS) uses the same knot vector and control points, together with weights $w_A > 0$. The weight function is
 
 ```math
-W(\xi) = \sum_{A=1}^{n} w_A \, \hat{N}_{A,p}(\xi)
+W(\xi) = \sum_{A=1}^{n} w_A \, \hat{N}_{A,p}(\xi),
 ```
 
-and defines the rational univariate basis functions:
+and the rational basis is
 
 ```math
 R_{A,p}(\xi) = \frac{w_A \, \hat{N}_{A,p}(\xi)}{W(\xi)}.
 ```
 
-These satisfy the same partition-of-unity property as B-splines,
+These functions sum to one, $\sum_A R_{A,p}(\xi) = 1$. If all weights are equal, $R_{A,p} = \hat{N}_{A,p}$.
 
-```math
-\sum_{A=1}^{n} R_{A,p}(\xi) = 1,
-```
-
-and reduce to ordinary B-splines when all weights are equal (then $R_{A,p} = \hat{N}_{A,p}$).
-
-NURBS are used to define geometry in the same way as B-splines, but with $R_A$ in place of $N_A$. A NURBS surface is:
-
-```math
-\boldsymbol{S}(\xi,\eta) = \sum_{A=1}^{N} \boldsymbol{X}_A \, R_A(\xi, \eta)
-```
-
-where each $R_A$ corresponds to a control-net index pair $(i,j)$ as in the B-spline case. Using the same tensor-product B-spline factors $\hat{N}_{i}^{(\xi)}$, $\hat{N}_{j}^{(\eta)}$ and weights $w_{ij}$ on the control net, let $n_\xi$ and $n_\eta$ denote the numbers of univariate B-spline basis functions in the $\xi$- and $\eta$-directions, respectively. Then:
+A NURBS surface uses the same product of one-dimensional bases, with $R_A$ in place of $N_A$. With weights $w_{ij}$ on the control points,
 
 ```math
 W(\xi,\eta) = \sum_{i=1}^{n_\xi} \sum_{j=1}^{n_\eta} w_{ij} \, \hat{N}_{i}^{(\xi)}(\xi) \, \hat{N}_{j}^{(\eta)}(\eta),
 ```
 
 ```math
-R_A(\xi,\eta) = R_{ij}(\xi,\eta) = \frac{w_{ij} \, \hat{N}_{i}^{(\xi)}(\xi) \, \hat{N}_{j}^{(\eta)}(\eta)}{W(\xi,\eta)}.
+R_A(\xi,\eta) = R_{ij}(\xi,\eta) = \frac{w_{ij} \, \hat{N}_{i}^{(\xi)}(\xi) \, \hat{N}_{j}^{(\eta)}(\eta)}{W(\xi,\eta)},
 ```
 
-Thus NURBS surfaces share the same tensor-product structure as B-spline surfaces; the only change is the rational basis $R_A$ built from the B-spline tensor product and the weights. This family can represent exact curved conic sections (circles, ellipses, cylinders, etc.) that a polynomial B-spline basis cannot represent exactly in general. NURBS curves and NURBS solids use the same rational construction with one or three parametric directions, respectively.
+```math
+\boldsymbol{S}(\xi,\eta) = \sum_{A=1}^{N} \boldsymbol{X}_A \, R_A(\xi, \eta).
+```
+
+
+## Refinement
+
+The geometry is unchanged by the three operations below. They act on one parametric direction `dir` and rewrite copies of the knot vectors, control points, and weights. A new `NURBSMesh` is then built from those arrays.
+
+**h-refinement** inserts a knot (Boehm). `knotinsertion!(kv, orders, cp, w, ξ; dir)` inserts the value `ξ` once in direction `dir`. The number of elements in that direction increases by one if `ξ` was not already a knot. Continuity at a newly inserted simple knot is $C^{p-1}$. Inserting a value that is already present raises the multiplicity and lowers the continuity to $C^{p-m}$.
+
+**p-refinement** raises the polynomial degree by one (Piegl and Tiller, *The NURBS Book*, algorithm A5.9). `orders = orderelevation!(kv, orders, cp, w; dir)` returns the updated order tuple. End knots remain open (multiplicity $p+1$ at the new degree). Interior multiplicities increase by one as well, so $C^{p-m}$ is preserved.
+
+**k-refinement** raises the degree first and then inserts new knots (Hughes, Cottrell, and Bazilevs, 2005). `orders = smoothnesselevation!(kv, orders, cp, w, new_knots; dir)` calls `orderelevation!` once and then `knotinsertion!` for each entry of `new_knots`. Those new knots have multiplicity one at the elevated degree, so continuity there is $C^{p}$. 
+
+```julia
+mesh = generate_nurbs_patch(:hypercube, (1, 1), (2, 2); cornerpos=(0.0, 0.0), size=(2.0, 3.0))
+
+kv = (copy(mesh.knot_vectors[1]), copy(mesh.knot_vectors[2]))
+cp = copy(mesh.control_points)
+w  = copy(mesh.weights)
+orders = mesh.orders
+
+# h-refinement, insert ξ = 0 in the first parametric direction
+knotinsertion!(kv, orders, cp, w, 0.0; dir=1)
+
+# p-refinement, raise degree by one in that direction
+orders = orderelevation!(kv, orders, cp, w; dir=1)
+
+mesh = NURBSMesh(kv, orders, cp, w)
+grid = BezierGrid(mesh)
+```
+
+Copy the arrays before refining. The knot vectors and control points are rewritten in place. Build a new `NURBSMesh` afterwards so the element connectivity is up to date.

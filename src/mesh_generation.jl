@@ -77,6 +77,13 @@ function Ferrite.generate_grid(::Type{<:BezierCell{RefHexahedron,order}}, nels::
 	return grid
 end
 
+"""
+    generate_nurbs_patch(name, nels, order; kwargs...)
+
+Build a NURBS patch. `name` is the geometry (`:plate_with_hole`, `:rectangle`, `:ring`, ...).
+`nels` is how many elements in each direction. `order` is the degree.
+The Meshes page lists every name and keyword.
+"""
 function generate_nurbs_patch(s::Symbol, nel::NTuple{N,Int}, order::Int; kwargs...) where N
 	orders = ntuple(i->order, N)
 	generate_nurbs_patch(Val{s}(), nel, orders; kwargs...)

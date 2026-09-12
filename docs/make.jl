@@ -15,8 +15,9 @@ makedocs(
     warnonly = true,
     pages = Any[
         "Home" => "index.md",
-        "Manual" => ["splines.md", "bezier_extraction.md"],
+        "Manual" => ["splines.md", "meshes.md", "bezier_extraction.md"],
         "Examples" => GENERATEDEXAMPLES,
+        "API" => "api.md",
     ]
 )
 

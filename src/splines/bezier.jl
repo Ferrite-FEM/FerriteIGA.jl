@@ -1,14 +1,11 @@
 export Bernstein
 
 """
-    Bernstein{dim,order}()
+    Bernstein{shape, order}()
 
-The Bertnstein polynominal spline basis. Usually used as the cell interpolation in 
-IGA, together with bezier extraction + BezierValues.
-
-`dim` - The spacial dimentsion of the interpolation
-`order` - A tuple with the order in each parametric direction. 
-"""  
+Bernstein polynomials of degree `order` on the reference `shape`.
+`IGAInterpolation` uses this basis on each cell after Bézier extraction.
+"""
 struct Bernstein{shape, order} <: Ferrite.ScalarInterpolation{shape, order}
     function Bernstein{shape,order}() where {rdim, shape<:RefHypercube{rdim}, order} 
         @assert order isa Int

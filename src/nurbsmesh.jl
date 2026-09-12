@@ -1,7 +1,11 @@
 export NURBSMesh, parent_to_parametric_map, eval_parametric_coordinate
+export knotinsertion!, orderelevation!, smoothnesselevation!
 
 """
-Defines a NURBS patch, containing knot vectors, orders, controlpoints, weights and connectivity arrays.
+	NURBSMesh(knot_vectors, orders, control_points, weights=ones(...))
+
+A NURBS or B-spline patch. `knot_vectors` and `orders` give the basis in each direction.
+`control_points` give the shape. `weights` are all ones for a B-spline.
 """
 struct NURBSMesh{pdim,sdim,T} #<: Ferrite.AbstractGrid
 	knot_vectors::NTuple{pdim,Vector{T}}
@@ -54,14 +58,12 @@ function Ferrite.getcoordinates(mesh::NURBSMesh, ie::Int)
 end
 
 """
-	eval_parametric_coordinate(mesh::NURBSMesh{pdim,sdim}, ξ::Vec{pdim}) where {pdim,sdim}
+	eval_parametric_coordinate(mesh::NURBSMesh, ξ)
 
-Given a coordinate `ξ` in the parametric domain in the parametric, this function 
-returns the corresponding coordinate in the global domain.
+Physical point corresponding to the parameter `ξ` on the patch.
 
 TODO: This function is currently very in-effecient for large domain.
 """
-
 function eval_parametric_coordinate(mesh::NURBSMesh{pdim,sdim}, ξ::Vec{pdim}) where {pdim,sdim}
 
 	bspline = BSplineBasis(mesh.knot_vectors, mesh.orders)
@@ -156,7 +158,11 @@ function generate_nurbs_meshdata(orders::NTuple{dim,Int}, nbf::NTuple{dim,Int}) 
 	return nel, nnp, nen, INN, IEN
 end
 
-#knot insertion algorithm that uses Boehm's algorithm for knot insertion h-refinement
+"""
+	knotinsertion!(knot_vectors, orders, control_points, weights, ξ; dir)
+
+h-refinement. Insert the knot `ξ` once in parametric direction `dir` (Boehm).
+"""
 function knotinsertion!(knot_vectors::NTuple{pdim,Vector{T}}, orders::NTuple{pdim,Int}, control_points::Vector{Vec{sdim,T}}, weights::Vector{T}, ξᴺ::T; dir::Int) where {pdim,sdim,T}
 
 	Ξ = knot_vectors[dir]
@@ -209,7 +215,11 @@ function knotinsertion!(knot_vectors::NTuple{pdim,Vector{T}}, orders::NTuple{pdi
 	return nothing
 end
 
-#p-refinement: raise degree by one using the algorithm A5.9, Piegl & Tiller in "The NURBS Book"
+"""
+	orderelevation!(knot_vectors, orders, control_points, weights; dir)
+
+p-refinement. Raise the polynomial degree by one in direction `dir`.
+"""
 function orderelevation!(knot_vectors::NTuple{pdim,Vector{T}}, orders::NTuple{pdim,Int}, control_points::Vector{Vec{sdim,T}}, weights::Vector{T}; dir::Int) where {pdim,sdim,T}
 
 	Ξ = knot_vectors[dir]
@@ -408,7 +418,12 @@ function orderelevation!(knot_vectors::NTuple{pdim,Vector{T}}, orders::NTuple{pd
 	return ntuple(i -> i == dir ? orders[i] + 1 : orders[i], pdim)
 end
 
-#raises global smoothness by 1 degree, first performs polynomial degree elevation then the corresponding knot insertion
+"""
+	smoothnesselevation!(knot_vectors, orders, control_points, weights, new_knots; dir)
+
+k-refinement. Raise the degree by one in direction `dir`, then insert each knot in `new_knots`.
+This is a pointwise smoothness elevation. 
+"""
 function smoothnesselevation!(knot_vectors::NTuple{pdim,Vector{T}}, orders::NTuple{pdim,Int}, control_points::Vector{Vec{sdim,T}}, weights::Vector{T}, new_knots::AbstractVector{T}; dir::Int) where {pdim,sdim,T}
 	orders = orderelevation!(knot_vectors, orders, control_points, weights; dir=dir)
 	for ξᴺ in new_knots

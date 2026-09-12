@@ -17,7 +17,7 @@ using Ferrite, FerriteIGA, LinearAlgebra
 # Next we define the functions for the integration of the element stiffness matrix and traction force.
 # These functions will be the same as for a normal finite elment problem, but
 # with the difference that we need the cell coorinates AND cell weights (the weights from the NURBS shape functions), to reinitilize the shape values, dNdx.
-# Read this [`page`](../bezier_values.md), to see how the shape values are reinitilized. 
+# See [Bezier extraction](@ref) for how the shape values are reinitialized. 
 function integrate_element!(ke::AbstractMatrix, C::SymmetricTensor{4,2}, cv)
     n_basefuncs = getnbasefunctions(cv)
 
@@ -161,8 +161,7 @@ addfacetset!(grid, "left", (x) -> x[1] ≈ -4.0)
 addfacetset!(grid, "bot", (x) -> x[2] ≈ 0.0)
 addfacetset!(grid, "right", (x) -> x[1] ≈ 0.0);
 
-# Create the cellvalues storing the shape function values. Note that the `CellVectorValues`/`FaceVectorValues` are wrapped in a `BezierValues`. It is in the 
-# reinit-function of the `BezierValues` that the actual bezier transformation of the shape values is performed. 
+# Cell and facet values. `reinit!` applies Bézier extraction, after which `shape_value` and `shape_gradient` return NURBS quantities. 
 ip_geo = IGAInterpolation{RefQuadrilateral,order}()
 ip_u = ip_geo^2
 qr_cell = QuadratureRule{RefQuadrilateral}(4)

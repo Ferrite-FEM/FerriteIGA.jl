@@ -25,6 +25,11 @@ let cache = Dict{Type{<:BezierCell}, Vector{Int}}()
 	end
 end
 
+"""
+    VTKIGAFile(filename, grid::BezierGrid)
+
+Write a `BezierGrid` to a `.vtu` file.
+"""
 struct VTKIGAFile{VTK<:WriteVTK.DatasetFile}
     vtk::VTK
 	cellset::Vector{Int}

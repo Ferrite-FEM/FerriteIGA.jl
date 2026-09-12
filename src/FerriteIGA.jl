@@ -28,6 +28,14 @@ const Optional{T} = Union{T, Nothing}
 const BezierExtractionOperator{T} = Vector{SparseArrays.SparseVector{T,Int}}
 const CoordsAndWeight{sdim,T} = Tuple{ <: AbstractVector{Vec{sdim,T}}, <: AbstractVector{T}}
 
+"""
+    BezierCoords
+
+Data for one cell, from `getcoordinates`.
+`x`, `w` are the NURBS points and weights.
+`xb`, `wb` are the Bézier points and weights.
+`beo` is the extraction operator.
+"""
 struct BezierCoords{dim_s,T} 
     xb   ::Vector{Vec{dim_s,T}}
     wb   ::Vector{T}
@@ -49,9 +57,11 @@ zero_bezier_coord(dim, T, nnodes) = BezierCoords{dim,T}(zeros(Vec{dim,T}, nnodes
 #Base.zero(Type{BezierCoords{dim,T}}) where {dim,T} = BezierCoords
 
 """
-    IGAInterpolation{shape, order} <: Ferrite.ScalarInterpolation{shape, order}
-"""
+    IGAInterpolation{shape, order}()
 
+Bernstein basis of degree `order` on `shape` (`RefLine`, `RefQuadrilateral`, or `RefHexahedron`).
+Use with `BezierCellValues`. For a 2D vector unknown write `ip^2`.
+"""
 struct IGAInterpolation{shape, order} <: Ferrite.ScalarInterpolation{shape, order}
     function IGAInterpolation{shape,order}() where {rdim, shape<:RefHypercube{rdim}, order} 
         #Check if you can construct a Bernstein basis
@@ -83,10 +93,9 @@ Ferrite.dirichlet_edgedof_indices(::IGAInterpolation{shape, order}) where {shape
 
 
 """
-    BezierCell{refshape,order,N} <: Ferrite.AbstractCell{refshape}
+    BezierCell{shape, order}(nodes)
 
-`N` = number of nodes/controlpoints
-`order` = tuple with order in each parametric dimension (does not need to be equal to `dim`)
+One cell of a `BezierGrid`. `nodes` are control-point numbers. `order` is the degree.
 """
 struct BezierCell{refshape,order,N} <: Ferrite.AbstractCell{refshape}
     nodes::NTuple{N,Int}
