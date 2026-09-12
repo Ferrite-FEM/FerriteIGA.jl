@@ -23,10 +23,6 @@ const CoordsAndWeight{sdim,T} = Tuple{ <: AbstractVector{Vec{sdim,T}}, <: Abstra
 
 include("exports.jl")
 
-const Optional{T} = Union{T, Nothing}
-const BezierExtractionOperator{T} = Vector{SparseArrays.SparseVector{T,Int}}
-const CoordsAndWeight{sdim,T} = Tuple{ <: AbstractVector{Vec{sdim,T}}, <: AbstractVector{T}}
-
 """
     BezierCoords
 
