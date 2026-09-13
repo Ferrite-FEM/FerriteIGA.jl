@@ -1,4 +1,4 @@
-# # Structural vibrations
+# # [Structural vibrations](@id structural_vibrations)
 
 # In this example, we will compare traditional Finite Element Method (FEM) with Isogeometric Analysis (IGA) for analysing structural vibration problems. We aim to replicate the results from __Cottrell, J. et al, Isogeometric analysis of structural vibrations, In Computer Methods in Applied Mechanics and Engineering [https://doi.org/10.1016/j.cma.2005.09.027](https://doi.org/10.1016/j.cma.2005.09.027)__ 
 
@@ -23,7 +23,7 @@
 # ## Main code
 
 # Per usual, we first load the relevant packages
-using Ferrite, IGA, LinearAlgebra, Plots
+using Ferrite, FerriteIGA, LinearAlgebra, Plots
 
 # Next we define the element routine used to compute the element stiffness and mass matrices
 function stiffness_and_mass_matrix!(ke, me, cv)

@@ -12,12 +12,12 @@
 #md #     It is also expected that the reader is familiar with the Ferrite package. In particular Ferrite.DofHandler and Ferrite.CellValues.
 
 # Start by loading the necessary packages
-using Ferrite, IGA, LinearAlgebra
+using Ferrite, FerriteIGA, LinearAlgebra
 
 # Next we define the functions for the integration of the element stiffness matrix and traction force.
 # These functions will be the same as for a normal finite elment problem, but
 # with the difference that we need the cell coorinates AND cell weights (the weights from the NURBS shape functions), to reinitilize the shape values, dNdx.
-# Read this [`page`](../bezier_values.md), to see how the shape values are reinitilized. 
+# See [Bezier extraction](@ref) for how the shape values are reinitialized. 
 function integrate_element!(ke::AbstractMatrix, C::SymmetricTensor{4,2}, cv)
     n_basefuncs = getnbasefunctions(cv)
 
@@ -112,7 +112,7 @@ function get_material(; E, ν)
     return SymmetricTensor{4, 2}(g)
 end;
 
-# We also create a function that calculates the stress in each quadrature point, given the cell displacement and such...
+# We also create a function that calculates the stress in each quadrature point.
 function calculate_stress(dh, cv::BezierCellValues, C::SymmetricTensor{4,2}, u::Vector{Float64})
     
     celldofs = zeros(Int, ndofs_per_cell(dh))
@@ -141,7 +141,7 @@ function calculate_stress(dh, cv::BezierCellValues, C::SymmetricTensor{4,2}, u::
 end;
 
 # Now we have all the parts needed to solve the problem.
-# We begin by generating the mesh. IGA.jl includes a couple of different functions that can generate different nurbs patches.
+# We begin by generating the mesh. FerriteIGA.jl includes a couple of different functions that can generate different nurbs patches.
 # In this example, we will generate the patch called "plate with hole". Note, currently this function can only generate the patch with second order basefunctions. 
 
 order = 2 # order of the NURBS
@@ -161,8 +161,7 @@ addfacetset!(grid, "left", (x) -> x[1] ≈ -4.0)
 addfacetset!(grid, "bot", (x) -> x[2] ≈ 0.0)
 addfacetset!(grid, "right", (x) -> x[1] ≈ 0.0);
 
-# Create the cellvalues storing the shape function values. Note that the `CellVectorValues`/`FaceVectorValues` are wrapped in a `BezierValues`. It is in the 
-# reinit-function of the `BezierValues` that the actual bezier transformation of the shape values is performed. 
+# Cell and facet values. `reinit!` applies Bézier extraction, after which `shape_value` and `shape_gradient` return NURBS quantities. 
 ip_geo = IGAInterpolation{RefQuadrilateral,order}()
 ip_u = ip_geo^2
 qr_cell = QuadratureRule{RefQuadrilateral}(4)
@@ -175,9 +174,6 @@ fv = BezierFacetValues(qr_face, ip_u);
 dh = DofHandler(grid)
 add!(dh, :u, ip_u)
 close!(dh);
-
-ae = zeros(ndofs(dh))
-IGA.apply_analytical_iga!(ae, dh, :u, x -> x);
 
 # Add two symmetry boundary condintions. Bottom face should only be able to move in x-direction, and the right boundary should only be able to move in y-direction
 ch = ConstraintHandler(dh)
@@ -197,17 +193,14 @@ K, f = assemble_problem(dh, grid, cv, fv, stiffmat, traction);
 apply!(K, f, ch)
 u = K \ f;
 
-# Now we want to export the results to VTK. So we calculate the stresses in each gauss-point, and project them to 
-# the nodes using the L2Projector from Ferrite. Node that we need to create new CellValues of type CellScalarValues, since the 
-# L2Projector only works with scalar fields.  
+# Now we want to export the results to VTK. We calculate the stresses in each gauss-point, and project them to 
+# the nodes using the L2Projector from Ferrite. 
 
 cellstresses = calculate_stress(dh, cv, stiffmat, u);
-
-# L2 projections currently broken for IGA
 projector = L2Projector(ip_u, grid)
 σ_nodes = project(projector, cellstresses, qr_cell)
 
-IGA.VTKIGAFile("plate_with_hole.vtu", grid) do vtk
+VTKIGAFile("plate_with_hole.vtu", grid) do vtk
     write_solution(vtk, dh, u)
     write_projection(vtk, projector, σ_nodes, "σ")
 end;

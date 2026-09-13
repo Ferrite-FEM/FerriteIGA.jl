@@ -1,4 +1,4 @@
-using Ferrite, IGA, LinearAlgebra, Plots
+using Ferrite, FerriteIGA, LinearAlgebra, Plots
 
 function stiffness_and_mass_matrix!(ke, me, cv)
     for qp in 1:getnquadpoints(cv)
