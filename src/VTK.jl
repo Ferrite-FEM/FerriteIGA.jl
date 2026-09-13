@@ -1,12 +1,12 @@
 
 function Ferrite.cell_to_vtkcell(::Type{<:BezierCell{RefHexahedron,order}}) where {order}
-    return Ferrite.VTKCellTypes.VTK_BEZIER_HEXAHEDRON
+    return VTKCellTypes.VTK_BEZIER_HEXAHEDRON
 end
 function Ferrite.cell_to_vtkcell(::Type{<:BezierCell{RefQuadrilateral,order}}) where {order}
-    return Ferrite.VTKCellTypes.VTK_BEZIER_QUADRILATERAL
+    return VTKCellTypes.VTK_BEZIER_QUADRILATERAL
 end
 function Ferrite.cell_to_vtkcell(::Type{<:BezierCell{RefLine,order}}) where {order}
-    return Ferrite.VTKCellTypes.VTK_BEZIER_CURVE
+    return VTKCellTypes.VTK_BEZIER_CURVE
 end
 
 # Store the Ferrite to vtk order in a cache for specific cell type
@@ -44,7 +44,7 @@ end
 Base.close(vtk::VTKIGAFile) = WriteVTK.vtk_save(vtk.vtk)
 
 function Base.show(io::IO, ::MIME"text/plain", vtk::VTKIGAFile)
-    open_str = WriteVTK.isopen(vtk.vtk) ? "open" : "closed"
+    open_str = isopen(vtk.vtk) ? "open" : "closed"
     filename = vtk.vtk.path
     print(io, "VTKFile for the $open_str file \"$(filename)\".")
 end
@@ -70,7 +70,7 @@ function _create_iga_vtk_grid(filename, grid::BezierGrid{sdim,C,T}, cellset; kwa
 	nnodes_per_cell = Ferrite.nnodes(cell)
 
 	#Variables for the vtk file
-	cls = MeshCell[]
+	cls = WriteVTK.MeshCell[]
 	beziercoords = Vec{sdim,T}[]
 	weights = T[]
 	cellorders = Int[]
@@ -113,8 +113,7 @@ end
 function WriteVTK.vtk_point_data(
 	vtkfile::WriteVTK.DatasetFile, 
 	cpvalues::Vector{<:Union{SymmetricTensor{order,dim,T,M}, 
-                             Tensor{order,dimv,T,M}, 
-                             SVector{M,T}}}, 
+                             Tensor{order,dimv,T,M}}}, 
 	name::AbstractString, 
 	grid::BezierGrid{dim,C}) where {order,dimv,dim,C,T,M}
 
@@ -131,7 +130,7 @@ function WriteVTK.vtk_point_data(
 		nodecount += length(cell.nodes)
     end
     
-	vtk_point_data(vtkfile, data, name)
+	WriteVTK.vtk_point_data(vtkfile, data, name)
 	
     return vtkfile
 end
@@ -139,14 +138,14 @@ end
 function Ferrite.write_solution(vtk::VTKIGAFile, dh::DofHandler, a, suffix="")
 	for fieldname in Ferrite.getfieldnames(dh)
 		data = _evaluate_at_geometry_nodes!(vtk, dh, a, fieldname)
-		vtk_point_data(vtk.vtk, data, string(fieldname, suffix))
+		WriteVTK.vtk_point_data(vtk.vtk, data, string(fieldname, suffix))
 	end
 end
 
 function Ferrite.write_projection(vtk::VTKIGAFile, proj::L2Projector, vals, name)
     data = Ferrite._evaluate_at_grid_nodes(proj, vals, #=vtk=# Val(true))::Matrix
     @assert size(data, 2) == getnnodes(Ferrite.get_grid(proj.dh))
-    vtk_point_data(vtk.vtk, data, name; component_names=Ferrite.component_names(eltype(vals)))
+    WriteVTK.vtk_point_data(vtk.vtk, data, name; component_names=Ferrite.component_names(eltype(vals)))
     return vtk
 end
 

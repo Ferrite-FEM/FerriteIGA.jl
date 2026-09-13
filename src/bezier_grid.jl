@@ -1,4 +1,3 @@
-export BezierGrid, getweights, getweights!, get_extraction_operator, get_bezier_coordinates, get_bezier_coordinates!, get_nurbs_coordinates
 
 """
     BezierGrid(mesh::NURBSMesh)
@@ -107,7 +106,7 @@ Base.@propagate_inbounds function getweights!(w::Vector, grid::BezierGrid, cell:
     end
 end
 
-function Ferrite.getweights(grid::BezierGrid, ic::Int)
+function get_nurbs_weights(grid::BezierGrid, ic::Int)
 	nodeids = collect(grid.cells[ic].nodes)
 	return grid.weights[nodeids]
 end

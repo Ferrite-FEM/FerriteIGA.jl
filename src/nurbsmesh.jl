@@ -1,6 +1,3 @@
-export NURBSMesh, parent_to_parametric_map, eval_parametric_coordinate
-export knotinsertion!, orderelevation!, smoothnesselevation!
-
 """
 	NURBSMesh(knot_vectors, orders, control_points, weights=ones(...))
 

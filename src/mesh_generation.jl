@@ -1,4 +1,3 @@
-export generate_nurbs_patch
 
 function _create_knotvector(T, nelx, p, m)
 	nbasefunks_x= nelx+p
