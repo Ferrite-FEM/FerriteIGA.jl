@@ -214,3 +214,44 @@ end
     @test getncells(bgrid) == getncells(grid)
     @test getnnodes(bgrid) == getnnodes(grid)
 end
+
+@testset "NURBSMesh refinement functions" begin
+    coarse = generate_nurbs_patch(:hypercube, (1, 1), (2, 2); cornerpos=(0.0, 0.0), size=(2.0, 3.0))
+
+    refined = FerriteIGA.knotinsertion(coarse, 0.0; dir=1)
+    kv = (copy(coarse.knot_vectors[1]), copy(coarse.knot_vectors[2]))
+    cp = copy(coarse.control_points)
+    w = copy(coarse.weights)
+    FerriteIGA.knotinsertion!(kv, coarse.orders, cp, w, 0.0; dir=1)
+    raw = NURBSMesh(kv, coarse.orders, cp, w)
+    @test refined.knot_vectors == raw.knot_vectors
+    @test refined.orders == raw.orders
+    @test refined.control_points ≈ raw.control_points
+    @test refined.weights ≈ raw.weights
+    @test getncells(refined) == getncells(raw)
+    @test getncells(coarse) == 1
+
+    elevated = FerriteIGA.orderelevation(coarse; dir=1)
+    kv = (copy(coarse.knot_vectors[1]), copy(coarse.knot_vectors[2]))
+    cp = copy(coarse.control_points)
+    w = copy(coarse.weights)
+    orders = FerriteIGA.orderelevation!(kv, coarse.orders, cp, w; dir=1)
+    raw = NURBSMesh(kv, orders, cp, w)
+    @test elevated.knot_vectors == raw.knot_vectors
+    @test elevated.orders == raw.orders
+    @test elevated.control_points ≈ raw.control_points
+    @test elevated.weights ≈ raw.weights
+    @test getncells(elevated) == getncells(raw)
+
+    smooth = FerriteIGA.smoothnesselevation(coarse, [0.0]; dir=1)
+    kv = (copy(coarse.knot_vectors[1]), copy(coarse.knot_vectors[2]))
+    cp = copy(coarse.control_points)
+    w = copy(coarse.weights)
+    orders = FerriteIGA.smoothnesselevation!(kv, coarse.orders, cp, w, [0.0]; dir=1)
+    raw = NURBSMesh(kv, orders, cp, w)
+    @test smooth.knot_vectors == raw.knot_vectors
+    @test smooth.orders == raw.orders
+    @test smooth.control_points ≈ raw.control_points
+    @test smooth.weights ≈ raw.weights
+    @test getncells(smooth) == getncells(raw)
+end

@@ -12,8 +12,4 @@ IGAInterpolation
 BezierCellValues
 BezierFacetValues
 VTKIGAFile
-knotinsertion!
-orderelevation!
-smoothnesselevation!
-eval_parametric_coordinate
 ```
