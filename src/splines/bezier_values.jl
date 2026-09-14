@@ -14,13 +14,13 @@ end
 Shape values on an IGA cell. Call `reinit!(cv, coords)` first. Then `shape_value` and
 `shape_gradient` return NURBS values.
 """
-struct BezierCellValues{FV, GM, QR, T} <: Ferrite.AbstractCellValues
+struct BezierCellValues{FV, GM, QR, T, detJ} <: Ferrite.AbstractCellValues
     bezier_values::FV # FunctionValues
     tmp_values::FV    # FunctionValues
     nurbs_values::FV  # FunctionValues
     geo_mapping::GM   # GeometryMapping
     qr::QR            # QuadratureRule
-    detJdV::Vector{T}
+    detJdV::detJ      # AbstractVector{<:Number} or Nothing
 
     current_beo::Base.RefValue{BezierExtractionOperator{T}}
     current_w::Vector{T}
@@ -62,11 +62,9 @@ Ferrite.geometric_interpolation(cv::BezierFacetValues) = Ferrite.geometric_inter
 
 function BezierCellValues(::Type{T}, qr::QuadratureRule, ip_fun::Interpolation, ip_geo::VectorizedInterpolation, ::ValuesUpdateFlags{FunDiffOrder, GeoDiffOrder, DetJdV}) where {T, FunDiffOrder, GeoDiffOrder, DetJdV}
 
-    @assert DetJdV
-
     geo_mapping = GeometryMapping{GeoDiffOrder}(T, ip_geo.ip, qr)
     fun_values = FunctionValues{FunDiffOrder}(T, ip_fun, qr, ip_geo)
-    detJdV = fill(T(NaN), getnquadpoints(qr))
+    detJdV = DetJdV ? fill(T(NaN), length(Ferrite.getweights(qr))) : nothing
 
     undef_beo = Ref(Vector{SparseArrays.SparseVector{T,Int}}(undef,0))
     undef_w   = NaN .* zeros(Float64, Ferrite.getngeobasefunctions(geo_mapping))
@@ -317,34 +315,17 @@ function Ferrite.reinit!(cv::BezierCellValues, (x,w)::CoordsAndWeight)
 
     for (q_point, gauss_w) in enumerate(Ferrite.getweights(cv.qr))
         mapping = Ferrite.calculate_mapping(cv.geo_mapping, q_point, x, w)
-       
-        detJ = Ferrite.calculate_detJ(Ferrite.getjacobian(mapping))
-        detJ > 0.0 || Ferrite.throw_detJ_not_pos(detJ)
-        cv.detJdV[q_point] = detJ * gauss_w
+        
+        if cv.detJdV !== nothing
+            detJ = Ferrite.calculate_detJ(Ferrite.getjacobian(mapping))
+            detJ > 0.0 || Ferrite.throw_detJ_not_pos(detJ)
+            cv.detJdV[q_point] = detJ * gauss_w
+        end
         _compute_intermidiate!(cv.tmp_values, cv.bezier_values, cv.geo_mapping, q_point, w)
-        Ferrite.apply_mapping!(cv.tmp_values, q_point, mapping)
+        if cv.detJdV !== nothing
+            Ferrite.apply_mapping!(cv.tmp_values, q_point, mapping)
+        end
         _bezier_transform(cv.nurbs_values, cv.tmp_values, q_point, cv.current_beo[], cv.current_w)
-    end
-    return nothing
-end
-
-function reinit_values!(cv::BezierCellValues, bc::BezierCoords)
-    set_bezier_operator!(cv, bc.beo[], bc.w)
-    x, w = (bc.xb, bc.wb)
-
-    n_geom_basefuncs = Ferrite.getngeobasefunctions(cv.geo_mapping)
-    @assert isa(Ferrite.mapping_type(cv.bezier_values), Ferrite.IdentityMapping)
-    @assert checkbounds(Bool, x, 1:n_geom_basefuncs)
-    @assert checkbounds(Bool, w, 1:n_geom_basefuncs)
-
-    for (q_point, gauss_w) in enumerate(Ferrite.getweights(cv.qr))
-        #mapping = Ferrite.calculate_mapping(cv.geo_mapping, q_point, x, w)
-        #detJ = Ferrite.calculate_detJ(Ferrite.getjacobian(mapping))
-        #cv.detJdV[q_point] = detJ * gauss_w
-        _compute_intermidiate!(cv.tmp_values, cv.bezier_values, cv.geo_mapping, q_point, w)
-        #Ferrite.apply_mapping!(cv.tmp_values, q_point, mapping)
-        _bezier_transform(cv.nurbs_values, cv.tmp_values, q_point, cv.current_beo[], cv.current_w)
-        #detJ > 0.0 || Ferrite.throw_detJ_not_pos(detJ)
     end
     return nothing
 end
@@ -533,6 +514,10 @@ end
         tmp_values.dNdx[j, q_point] = Ferrite.dothelper(tmp_values.dNdξ[j, q_point], Jinv)
     end
 end=#
+
+function Ferrite.calculate_mapping(geo_mapping::Ferrite.GeometryMapping{0}, q_point, x::Vector{Vec{sdim,T}}, w::Vector{T}) where {sdim,T}
+    return Ferrite.MappingValues(nothing, nothing)
+end
 
 @inline _getrdim(geomapping::Ferrite.GeometryMapping) = length(first(geomapping.dMdξ))
 function Ferrite.calculate_mapping(geo_mapping::Ferrite.GeometryMapping{1}, q_point, x::Vector{Vec{sdim,T}}, w::Vector{T}) where {sdim,T}
