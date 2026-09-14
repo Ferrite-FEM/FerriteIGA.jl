@@ -11,6 +11,13 @@ struct IGACellCache{X,G<:Ferrite.AbstractGrid,DH<:Union{Ferrite.AbstractDofHandl
     dofs::Vector{Int}
 end
 
+function IGACellCache(sdh::SubDofHandler{<:DofHandler{dim, <:BezierGrid}}, flags::UpdateFlags=UpdateFlags()) where {dim}
+    grid = Ferrite.get_grid(sdh.dh)
+    T = Ferrite.get_coordinate_eltype(grid)
+    coords = zero_bezier_coord(dim, T, 0)
+    return IGACellCache(flags, grid, Ref(-1), Int[], coords, sdh, Int[])
+end
+
 function IGACellCache(dh::DofHandler{dim,G}, flags::UpdateFlags=UpdateFlags()) where {dim,G}
     grid = Ferrite.get_grid(dh)
     T = Ferrite.get_coordinate_eltype(grid)
@@ -45,7 +52,11 @@ Ferrite.getnodes(cc::IGACellCache) = cc.nodes
 Ferrite.getcoordinates(cc::IGACellCache) = cc.bezier_cell_data
 Ferrite.celldofs(cc::IGACellCache) = cc.dofs
 Ferrite.cellid(cc::IGACellCache) = cc.cellid[]
+Ferrite.reinit!(cv::BezierCellValues, cc::IGACellCache) = reinit!(cv, cc.bezier_cell_data)
 
+function Ferrite.CellIterator(sdh::SubDofHandler{<:DofHandler{<:Any, <:BezierGrid}}, flags::UpdateFlags = UpdateFlags())
+    return CellIterator(IGACellCache(sdh, flags), sdh.cellset)
+end
 
 #
 # Copy FaceCache from ferrite
