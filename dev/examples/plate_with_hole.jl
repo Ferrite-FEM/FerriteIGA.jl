@@ -157,10 +157,12 @@ apply!(K, f, ch)
 u = K \ f;
 
 cellstresses = calculate_stress(dh, cv, stiffmat, u);
+projector = L2Projector(ip_u, grid)
+σ_nodes = project(projector, cellstresses, qr_cell)
 
 VTKIGAFile("plate_with_hole.vtu", grid) do vtk
     write_solution(vtk, dh, u)
-    #IGA.write_projections(vtk, projector, σ_nodes, "σ")
+    write_projection(vtk, projector, σ_nodes, "σ")
 end;
 
 # This file was generated using Literate.jl, https://github.com/fredrikekre/Literate.jl

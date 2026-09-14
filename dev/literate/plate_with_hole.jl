@@ -112,7 +112,7 @@ function get_material(; E, ν)
     return SymmetricTensor{4, 2}(g)
 end;
 
-# We also create a function that calculates the stress in each quadrature point, given the cell displacement and such...
+# We also create a function that calculates the stress in each quadrature point.
 function calculate_stress(dh, cv::BezierCellValues, C::SymmetricTensor{4,2}, u::Vector{Float64})
     
     celldofs = zeros(Int, ndofs_per_cell(dh))
@@ -193,17 +193,14 @@ K, f = assemble_problem(dh, grid, cv, fv, stiffmat, traction);
 apply!(K, f, ch)
 u = K \ f;
 
-# Now we want to export the results to VTK. So we calculate the stresses in each gauss-point, and project them to 
-# the nodes using the L2Projector from Ferrite. Node that we need to create new CellValues of type CellScalarValues, since the 
-# L2Projector only works with scalar fields.  
+# Now we want to export the results to VTK. We calculate the stresses in each gauss-point, and project them to 
+# the nodes using the L2Projector from Ferrite. 
 
 cellstresses = calculate_stress(dh, cv, stiffmat, u);
-
-# L2 projections currently broken for IGA
-# projector = L2Projector(ip_u, grid)
-# σ_nodes = project(projector, cellstresses, qr_cell)
+projector = L2Projector(ip_u, grid)
+σ_nodes = project(projector, cellstresses, qr_cell)
 
 VTKIGAFile("plate_with_hole.vtu", grid) do vtk
     write_solution(vtk, dh, u)
-    #IGA.write_projections(vtk, projector, σ_nodes, "σ")
+    write_projection(vtk, projector, σ_nodes, "σ")
 end;
