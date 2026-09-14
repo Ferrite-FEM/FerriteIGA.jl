@@ -4,7 +4,7 @@
 A NURBS or B-spline patch. `knot_vectors` and `orders` give the basis in each direction.
 `control_points` give the shape. `weights` are all ones for a B-spline.
 """
-struct NURBSMesh{pdim,sdim,T} #<: Ferrite.AbstractGrid
+struct NURBSMesh{pdim,sdim,T}
 	knot_vectors::NTuple{pdim,Vector{T}}
 	orders::NTuple{pdim,Int}
 	control_points::Vector{Vec{sdim,T}}
@@ -48,10 +48,49 @@ end
 
 Ferrite.getncells(mesh::NURBSMesh) = size(mesh.IEN, 2)
 Ferrite.getnnodes(mesh::NURBSMesh) = maximum(mesh.IEN) 
-const getncontrolponits = Ferrite.getnnodes
 
 function Ferrite.getcoordinates(mesh::NURBSMesh, ie::Int)
 	return mesh.control_points[mesh.IEN[:,ie]]
+end
+
+function _copy_nurbsmesh_data(mesh::NURBSMesh)
+	return (map(copy, mesh.knot_vectors), mesh.orders, copy(mesh.control_points), copy(mesh.weights))
+end
+
+"""
+	knotinsertion(mesh::NURBSMesh, ξ; dir)
+
+Return a new mesh with the knot `ξ` inserted once in parametric direction `dir`.
+The input mesh is unchanged.
+"""
+function knotinsertion(mesh::NURBSMesh, ξ::T; dir::Int) where T
+	knot_vectors, orders, control_points, weights = _copy_nurbsmesh_data(mesh)
+	knotinsertion!(knot_vectors, orders, control_points, weights, ξ; dir)
+	return NURBSMesh(knot_vectors, orders, control_points, weights)
+end
+
+"""
+	orderelevation(mesh::NURBSMesh; dir)
+
+Return a new mesh with the polynomial degree raised by one in direction `dir`.
+The input mesh is unchanged.
+"""
+function orderelevation(mesh::NURBSMesh; dir::Int)
+	knot_vectors, orders, control_points, weights = _copy_nurbsmesh_data(mesh)
+	orders = orderelevation!(knot_vectors, orders, control_points, weights; dir)
+	return NURBSMesh(knot_vectors, orders, control_points, weights)
+end
+
+"""
+	smoothnesselevation(mesh::NURBSMesh, new_knots; dir)
+
+Return a new mesh after degree elevation and insertion of `new_knots` in
+parametric direction `dir`. The input mesh is unchanged.
+"""
+function smoothnesselevation(mesh::NURBSMesh, new_knots::AbstractVector{T}; dir::Int) where T
+	knot_vectors, orders, control_points, weights = _copy_nurbsmesh_data(mesh)
+	orders = smoothnesselevation!(knot_vectors, orders, control_points, weights, new_knots; dir)
+	return NURBSMesh(knot_vectors, orders, control_points, weights)
 end
 
 """
@@ -62,42 +101,14 @@ Physical point corresponding to the parameter `ξ` on the patch.
 TODO: This function is currently very in-effecient for large domain.
 """
 function eval_parametric_coordinate(mesh::NURBSMesh{pdim,sdim}, ξ::Vec{pdim}) where {pdim,sdim}
-
 	bspline = BSplineBasis(mesh.knot_vectors, mesh.orders)
 	@assert getnbasefunctions(bspline) == length(mesh.control_points)
-
 	x = zero(Vec{sdim,Float64})
 	for i in 1:getnbasefunctions(bspline)
 		N = Ferrite.reference_shape_value(bspline, ξ, i)
 		x += N*mesh.control_points[i]
 	end
-
 	return x
-
-	#Possible faster algorithm:
-	#=
-	knot_spans = ntuple(pdim) do i
-		_find_span(n[i], p[i], ξ[i], Ξ[i])
-	end
-
-	shape_values = ntuple(pdim) do i
-		_eval_nonzero_bspline_values!(N[i], first(knot_span[i]), orders[i], ξ[i], knot_vectors[i] )
-	end
-
-	x = zero(Vec{sdim,Float64})
-	for k in knot_spans[3]
-		Nk = N[k]
-		for j in knot_spans[2]
-			Nj = N[k]
-			N = Nj*Nk
-			for i in knot_spans[1]
-				N *= N[i]
-				index = CartesianIndex(i,j,k)
-				x += N * control_points[index]
-			end
-		end
-	end =#
-	
 end
 
 """
@@ -107,7 +118,6 @@ Given a coordinate for a cell in the parent domain `xi`, this functions returns 
 the parametric domain.
 """
 function parent_to_parametric_map(nurbsmesh::NURBSMesh{pdim}, cellid::Int, xi::Vec{pdim}) where {pdim}
-
 	Ξ = nurbsmesh.knot_vectors
 	_ni = nurbsmesh.INN[nurbsmesh.IEN[end,cellid],1:pdim]
 
