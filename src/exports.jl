@@ -30,5 +30,8 @@ parent_to_parametric_map,
 eval_parametric_coordinate,
 knotinsertion!, 
 orderelevation!, 
-smoothnesselevation!
+smoothnesselevation!,
+knotinsertion, 
+orderelevation, 
+smoothnesselevation
 
