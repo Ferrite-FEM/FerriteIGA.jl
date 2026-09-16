@@ -17,7 +17,7 @@ makedocs(
         "Home" => "index.md",
         "Manual" => ["splines.md", "meshes.md", "bezier_extraction.md"],
         "Examples" => GENERATEDEXAMPLES,
-        "API" => "api.md",
+        "API" => ["api.md", "nurbsmesh.md"],
     ]
 )
 
