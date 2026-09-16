@@ -141,9 +141,10 @@ function get_bezier_coordinates!(xb::AbstractVector{Vec{dim,T}},
 
 	C = grid.beo[ic]
 	if C === nothing #This is not an IGA cell
+		xb .= x
+		wb .= w
 		return nothing
 	end
-
 
 	for i in 1:n
 		xb[i] = zero(Vec{dim,T})
