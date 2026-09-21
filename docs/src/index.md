@@ -4,7 +4,7 @@ Isogeometric analysis in the [Ferrite](https://github.com/Ferrite-FEM/Ferrite.jl
 
 The basis is a B-spline or NURBS space, the same functions used for CAD geometry. Degrees of freedom, constraints, and assembly use the Ferrite interface. Bézier extraction converts the splines into Bernstein polynomials so the geometry works with a standard finite element code.
 
-The [Splines](@ref), [Meshes](@ref), and [Bezier extraction](@ref) pages expand the topics below. Examples include the [Infinite plate with hole](@ref) and [structural vibrations](@ref structural_vibrations) of an elastic rod.
+The [Splines](@ref), [Meshes](@ref), and [Bezier extraction](@ref) pages expand the topics below. Examples include the [Infinite plate with hole](@ref), [structural vibrations](@ref structural_vibrations) of an elastic rod, and a [Kirchhoff plate](@ref kirchhoff_plate).
 
 ## Isogeometric analysis
 
@@ -12,7 +12,7 @@ Hughes, Cottrell, and Bazilevs (2005) introduced isogeometric analysis as a Gale
 
 Continuity is built into the knot vector, and the increased smoothness of IGA is a significant difference from standard finite elements. 
 
-In linear elasticity the stress comes from derivatives of the displacement. In a standard $C^0$ mesh these derivatives jump at element edges, which affects stress concentrations and bending curvature. A higher-order smoothness patch keeps strains and stresses continuous inside the patch. Thin shells that use second derivatives of the displacement need at least continuity $C^1$. The [Infinite plate with hole](@ref) is a plane-stress problem with a circular hole that NURBS represent exactly.
+In linear elasticity the stress comes from derivatives of the displacement. In a standard $C^0$ mesh these derivatives jump at element edges, which affects stress concentrations and bending curvature. A higher-order smoothness patch keeps strains and stresses continuous inside the patch. Thin plates and shells that use second derivatives of the displacement need at least continuity $C^1$. See the [Kirchhoff plate](@ref kirchhoff_plate) for bending. The [Infinite plate with hole](@ref) is a plane-stress problem with a circular hole that NURBS represent exactly.
 
 The same smoothness provides another advantage in the eigenvalue spectrum and vibration problems. Cottrell et al. (2006) showed that the spline discretization produces an eigenvalue/frequency spectrum closer to the exact spectrum of the problem than a $C^0$ finite element space of the same degree, which drifts once the mode number exceeds about half the number of degrees of freedom. The [structural vibrations](@ref structural_vibrations) example shows the vibration spectrum of IGA.
 
