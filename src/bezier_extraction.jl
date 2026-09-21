@@ -1,4 +1,12 @@
+"""
+    transform_basis!(C::BezierExtractionOperator, Nout::AbstractMatrix, Nin::AbstractMatrix, [w=nothing]; stride::Int=1)
 
+Transform basis function values or their derivatives from the Bernstein basis (`Nin`) to the B-spline or NURBS basis (`Nout`) using the extraction operator `C`.
+
+When the optional NURBS weights `w` are provided, the transformation incorporates them element-wise as ``N_i^{\\text{out}} = w_i \\sum_j C_{i,j} N_j^{\\text{in}}``. 
+
+The `stride` argument allows the transformation of vector-valued basis functions. 
+"""
 function transform_basis!(
     C::BezierExtractionOperator,
     Nout::AbstractMatrix{T},
@@ -32,6 +40,17 @@ function transform_basis!(
     return nothing
 end
 
+"""
+    transform_coords!(xb::AbstractVector, wb::AbstractVector, C::BezierExtractionOperator, x::AbstractVector, w::AbstractVector)
+
+Compute the local Bézier control points `xb` and corresponding weights `wb` for an element, given the global B-spline/NURBS control coordinates `x` and weights `w`.
+
+The transformation projects the global control points into homogeneous space, applies the extraction operator `C`, and projects the results back into Cartesian coordinates. The operation mutates `xb` and `wb` in-place according to:
+
+``\\mathbf{x}_b^{(j)} = \\frac{1}{w_b^{(j)}} \\sum_i C_{i,j} w_i \\mathbf{x}_i``
+
+``w_b^{(j)} = \\sum_i C_{i,j} w_i``
+"""
 function transform_coords!(
     xb::AbstractVector{Vec{dim,T}},
     wb::AbstractVector{T},

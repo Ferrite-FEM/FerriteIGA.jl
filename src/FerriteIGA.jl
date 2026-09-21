@@ -21,10 +21,12 @@ const Optional{T} = Union{T, Nothing}
 const CoordsAndWeight{sdim,T} = Tuple{ <: AbstractVector{Vec{sdim,T}}, <: AbstractVector{T}}
 
 """
+    BezierExtractionOperator{T}
 
+Represent the Bézier extraction operator for an element, used to map between the local Bernstein polynomial basis and the global B-spline or NURBS basis.
 """
 struct BezierExtractionOperator{T}
-    C::Vector{SparseVector{T,Int}}
+    C::Vector{SparseVector{T,Int}} #TODO: Consider changing this to SparseMatrixCSR instead
 end
 
 include("exports.jl")
