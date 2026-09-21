@@ -5,7 +5,8 @@ include("generate.jl")
 
 GENERATEDEXAMPLES = [joinpath("examples", f) for f in (
     "plate_with_hole.md",
-    "structuralvibrations.md"
+    "structuralvibrations.md",
+    "kirchhoff_plate.md",
     )]
 
 makedocs(
