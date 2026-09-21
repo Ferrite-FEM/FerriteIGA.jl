@@ -143,24 +143,9 @@ function get_bezier_coordinates!(xb::AbstractVector{Vec{dim,T}},
 	if C === nothing #This is not an IGA cell
 		xb .= x
 		wb .= w
-		return nothing
+	else
+		transform_coords!(xb, wb, C, x, w)
 	end
-
-	for i in 1:n
-		xb[i] = zero(Vec{dim,T})
-		wb[i] = zero(T)
-	end
-
-	for i in 1:n
-		c_row = C[i]
-		_w = w[i]
-		_x = _w*x[i]
-		for (j, nz_ind) in enumerate(c_row.nzind)                
-			xb[nz_ind] += c_row.nzval[j] * _x
-			wb[nz_ind] += c_row.nzval[j] * _w
-		end
-	end
-	xb ./= wb
 
 	return nothing
 end

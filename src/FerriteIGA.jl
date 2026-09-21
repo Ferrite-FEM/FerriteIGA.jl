@@ -18,8 +18,14 @@ using SparseArrays:
     SparseArrays, SparseMatrixCSC, SparseVector, sparsevec, sparse
 
 const Optional{T} = Union{T, Nothing}
-const BezierExtractionOperator{T} = Vector{SparseArrays.SparseVector{T,Int}}
 const CoordsAndWeight{sdim,T} = Tuple{ <: AbstractVector{Vec{sdim,T}}, <: AbstractVector{T}}
+
+"""
+
+"""
+struct BezierExtractionOperator{T}
+    C::Vector{SparseVector{T,Int}}
+end
 
 include("exports.jl")
 

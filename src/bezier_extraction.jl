@@ -1,14 +1,78 @@
 
+function transform_basis!(
+    C::BezierExtractionOperator,
+    Nout::AbstractMatrix{T},
+    Nin::AbstractMatrix{T},
+    w = nothing;
+    stride::Int = 1,
+) where {T}
+    @assert size(Nout) == size(Nin)
+    @assert size(Nout, 1) == length(C.C) * stride
+    @assert w === nothing || length(w) == length(C.C)
+
+    @inbounds for col in axes(Nout, 2)
+        for i in eachindex(C.C)
+            Ci = C.C[i]
+            wi = w === nothing ? one(T) : w[i]
+            nzind = Ci.nzind
+            nzval = Ci.nzval
+            
+            for d in 1:stride
+                oi = (i - 1) * stride + d
+                s = zero(T)
+                for k in eachindex(nzind)
+                    j = nzind[k]
+                    ii = (j - 1) * stride + d
+                    s += nzval[k] * Nin[ii, col]
+                end
+                Nout[oi, col] = wi * s
+            end
+        end
+    end
+    return nothing
+end
+
+function transform_coords!(
+    xb::AbstractVector{Vec{dim,T}},
+    wb::AbstractVector{T},
+    C::BezierExtractionOperator,
+    x::AbstractVector{Vec{dim,T}},
+    w::AbstractVector{T},
+) where {dim,T}
+
+	C = C.C
+    n = length(C)
+
+	@assert length(xb) == n
+    @assert length(xb) == length(wb)
+    @assert length(w) == length(x)
+    fill!(xb, zero(Vec{dim,T}))
+    fill!(wb, zero(T))
+
+	for i in 1:n
+		c_row = C[i]
+		_w = w[i]
+		_x = _w*x[i]
+		for (j, nz_ind) in enumerate(c_row.nzind)                
+			xb[nz_ind] += c_row.nzval[j] * _x
+			wb[nz_ind] += c_row.nzval[j] * _w
+		end
+	end
+	xb ./= wb
+
+    return xb, wb
+end
+
 function bezier_extraction_to_vectors(Ce::AbstractVector{<:AbstractMatrix})
     T = Float64
-    nbe = length(Ce)
+    nbeos = length(Ce)
 
-    Cvecs = [Vector{SparseArrays.SparseVector{T,Int}}() for _ in 1:nbe]
-    for ie in 1:nbe
-        cv = bezier_extraction_to_vector(Ce[ie])
-        Cvecs[ie] = cv
+    beos = BezierExtractionOperator{T}[]
+    for ie in 1:nbeos
+        beo = bezier_extraction_to_vector(Ce[ie])
+        push!(beos, beo)
     end
-    return Cvecs
+    return beos
 end
 
 function bezier_extraction_to_vector(Ce::AbstractMatrix{T}) where T
@@ -19,7 +83,7 @@ function bezier_extraction_to_vector(Ce::AbstractMatrix{T}) where T
         push!(Cvecs, SparseArrays.sparsevec(ce))
     end
 
-    return Cvecs
+    return BezierExtractionOperator(Cvecs)
 end
 
 function beo2matrix(m::BezierExtractionOperator{T}) where T
@@ -32,51 +96,6 @@ function beo2matrix(m::BezierExtractionOperator{T}) where T
     end
     return m2
 end
-
-
-"""
-	compute_bezier_points(bezier_points::AbstractVector{T2}, Ce::BezierExtractionOperator{T}, control_points::AbstractVector{T2}; dim::Int=1)
-
-Given a BezierExtractionOperator and control points for a cell, compute the bezier controlpoints.
-"""
-function compute_bezier_points!(bezier_points::Vector{T2}, Ce::BezierExtractionOperator, control_points::AbstractVector{T2}; dim::Int=1) where {T2}
-
-	n_points = length(first(Ce))
-	@boundscheck (length(control_points) == length(Ce)*dim)
-	@boundscheck (length(bezier_points) == n_points*dim)
-
-	Base.@inbounds for i in 1:length(bezier_points)
-		bezier_points[i] = zero(T2)
-	end
-
-	for ic in 1:length(control_points)÷dim
-		ce = Ce[ic]
-
-		for i in 1:n_points
-			for d in 1:dim
-				bezier_points[(i-1)*dim + d] += ce[i] * control_points[(ic-1)*dim + d]
-			end
-		end
-	end
-
-	return nothing
-end
-#const bezier_extraction! = compute_bezier_points!
-
-"""
-	compute_bezier_points(Ce::BezierExtractionOperator{T}, control_points::AbstractVector{T2}; dim::Int=1)
-
-Given a BezierExtractionOperator and control points for a cell, compute the bezier controlpoints.
-"""
-function compute_bezier_points(Ce::BezierExtractionOperator{T}, control_points::AbstractVector{T2}; dim::Int=1) where {T2,T}
-
-	bezierpoints = zeros(T2, length(first(Ce))*dim)
-	compute_bezier_points!(bezierpoints, Ce, control_points, dim=dim)
-
-	return bezierpoints
-
-end
-
 
 """
 	compute_bezier_extraction_operators2(orders::NTuple{pdim,Int}, knots::NTuple{pdim,Vector{T}})
@@ -164,33 +183,6 @@ function _compute_bezier_extraction_operators(p::Int, knot::Vector{T}) where T
 		end
 	end
 
-	#The last C-matrix is not used
-	#pop!(C)
 	C = SparseArrays.sparse.(C[1:nb])
 	return C, nb
-end
-
-function diagonal_beo(N::Int)
-    beo = BezierExtractionOperator{Float64}(undef, N)
-    for i in 1:N
-        V = SparseArrays.sparsevec([i], [1.0], N)
-        beo[i] = V
-    end
-    return beo
-end
-
-function combine_beo(a::BezierExtractionOperator{Float64}, b::BezierExtractionOperator{Float64})
-    la = length(a)
-    lb = length(b)
-    ntotal = la+lb
-    beo = BezierExtractionOperator{Float64}()
-    for i in 1:la
-        newrow = SparseArrays.sparsevec(a[i].nzind, a[i].nzval, ntotal)
-        push!(beo, newrow)
-    end
-    for i in 1:lb
-        newrow = SparseArrays.sparsevec(b[i].nzind .+ la, b[i].nzval, ntotal)
-        push!(beo, newrow)
-    end
-    return beo
 end
