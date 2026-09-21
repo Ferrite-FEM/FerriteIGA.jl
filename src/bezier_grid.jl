@@ -9,8 +9,8 @@ Ferrite grid with NURBS weights and an extraction operator on each cell.
 """
 struct BezierGrid{dim,C<:Ferrite.AbstractCell,T<:Real} <: Ferrite.AbstractGrid{dim}
 	grid    ::Ferrite.Grid{dim,C,T}
-	weights ::Vector{Float64}
-	beo     ::Vector{BezierExtractionOperator{Float64}}
+	weights ::Vector{T}
+	beo     ::Vector{Optional{BezierExtractionOperator{T}}}
 
 	#Alias from grid
 	cells::Vector{C}
@@ -20,7 +20,7 @@ struct BezierGrid{dim,C<:Ferrite.AbstractCell,T<:Real} <: Ferrite.AbstractGrid{d
     facetsets::Dict{String,OrderedSet{FacetIndex}}
     vertexsets::Dict{String,OrderedSet{VertexIndex}}
 
-	function BezierGrid(grid::Ferrite.Grid{dim,C,T}, weights::Vector{T}, beo::Vector{BezierExtractionOperator{T}}) where {dim,C,T}
+	function BezierGrid(grid::Ferrite.Grid{dim,C,T}, weights::Vector{T}, beo::Vector{Optional{BezierExtractionOperator{T}}}) where {dim,C,T}
 		return new{dim,C,T}(
 			grid, weights, beo,
 			grid.cells, grid.nodes, grid.cellsets, grid.nodesets, grid.facetsets, grid.vertexsets, 
@@ -31,16 +31,16 @@ end
 function BezierGrid(cells::Vector{C},
 		nodes::Vector{Ferrite.Node{dim,T}},
 		weights::AbstractVector{T},
-		extraction_operator::AbstractVector{BezierExtractionOperator{T}}; 
+		extraction_operators::Union{Vector{BezierExtractionOperator{T}}, Vector{Optional{BezierExtractionOperator{T}}}}; 
 		cellsets::Dict{String,OrderedSet{Int}}             = Dict{String,OrderedSet{Int}}(),
 		nodesets::Dict{String,OrderedSet{Int}}             = Dict{String,OrderedSet{Int}}(),
 		facetsets::Dict{String,OrderedSet{FacetIndex}}      = Dict{String,OrderedSet{FacetIndex}}(),
 		vertexsets::Dict{String,OrderedSet{VertexIndex}}   = Dict{String,OrderedSet{VertexIndex}}()) where {dim,C,T}
 
-	
+	extraction_operators = convert(Vector{Optional{BezierExtractionOperator{T}}}, extraction_operators)
 	grid = Ferrite.Grid(cells, nodes; nodesets, cellsets, facetsets, vertexsets)
 
-	return BezierGrid(grid, weights, extraction_operator)
+	return BezierGrid(grid, weights, extraction_operators)
 end
 
 function BezierGrid(mesh::NURBSMesh{pdim,sdim}) where {pdim,sdim}
@@ -64,14 +64,8 @@ function BezierGrid(mesh::NURBSMesh{pdim,sdim}) where {pdim,sdim}
 end
 
 function BezierGrid(grid::Ferrite.Grid{dim,C,T}) where {dim,C,T}
-	weights = ones(Float64, getnnodes(grid))
-
-	extraction_operator = BezierExtractionOperator{T}[]
-	for cellid in 1:getncells(grid)
-		nnodes = length(grid.cells[cellid].nodes)
-		beo = diagonal_beo(nnodes)
-		push!(extraction_operator, beo)
-	end
+	weights = ones(T, getnnodes(grid))
+	extraction_operator = Optional{BezierExtractionOperator{T}}[nothing for _ in 1:getncells(grid)]
 
 	return BezierGrid(grid, weights, extraction_operator)
 end
@@ -116,7 +110,7 @@ Ferrite.get_coordinate_type(::BezierGrid{dim,C,T}) where {dim,C,T} = Vec{dim,T}
 
 function Ferrite.getcoordinates!(bc::BezierCoords{dim,T}, grid::BezierGrid, ic::Int) where {dim,T}
 	get_bezier_coordinates!(bc.xb, bc.wb, bc.x, bc.w, grid, ic)
-	bc.beo[] = grid.beo[ic]
+	bc.beo = grid.beo[ic]
 	return bc
 end
 
@@ -128,7 +122,7 @@ function Ferrite.getcoordinates(grid::BezierGrid{dim,C,T}, ic::Int) where {dim,C
 	xb = zeros(Vec{dim,T}, n)
 	x = zeros(Vec{dim,T}, n)
 	
-	bc = BezierCoords(xb, wb, x, w, Ref(grid.beo[ic]))
+	bc = BezierCoords(xb, wb, x, w, grid.beo[ic])
 	getcoordinates!(bc,grid,ic)
 
 	return bc
@@ -141,10 +135,16 @@ function get_bezier_coordinates!(xb::AbstractVector{Vec{dim,T}},
 								 grid::BezierGrid, 
 								 ic::Int) where {dim,T}
     n = length(xb)
-	C = grid.beo[ic]
-
+	
 	Ferrite.getcoordinates!(x, grid.grid, ic)
 	getweights!(w, grid, ic)
+
+	C = grid.beo[ic]
+	if C === nothing #This is not an IGA cell
+		xb .= x
+		wb .= w
+		return nothing
+	end
 
 	for i in 1:n
 		xb[i] = zero(Vec{dim,T})

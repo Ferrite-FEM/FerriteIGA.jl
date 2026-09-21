@@ -14,16 +14,15 @@ end
 Shape values on an IGA cell. Call `reinit!(cv, coords)` first. Then `shape_value` and
 `shape_gradient` return NURBS values.
 """
-struct BezierCellValues{FV, GM, QR, T, detJ} <: Ferrite.AbstractCellValues
-    bezier_values::FV # FunctionValues
-    tmp_values::FV    # FunctionValues
-    nurbs_values::FV  # FunctionValues
-    geo_mapping::GM   # GeometryMapping
-    qr::QR            # QuadratureRule
-    detJdV::detJ      # AbstractVector{<:Number} or Nothing
-
-    current_beo::Base.RefValue{BezierExtractionOperator{T}}
-    current_w::Vector{T}
+mutable struct BezierCellValues{FV, GM, QR, T, detJ} <: Ferrite.AbstractCellValues
+    const bezier_values::FV # FunctionValues
+    const tmp_values::FV    # FunctionValues
+    const nurbs_values::FV  # FunctionValues
+    const geo_mapping::GM   # GeometryMapping
+    const qr::QR            # QuadratureRule
+    const detJdV::detJ      # AbstractVector{<:Number} or Nothing
+    current_beo::BezierExtractionOperator{T}
+    const current_w::Vector{T}
 end
 
 """
@@ -31,18 +30,17 @@ end
 
 Shape values on an IGA face. Call `reinit!(fv, coords, faceid)` first.
 """
-struct BezierFacetValues{FV, GM, FQR, dim, T, V_FV<:AbstractVector{FV}, V_GM<:AbstractVector{GM}} <: Ferrite.AbstractFacetValues
-    bezier_values::V_FV # FunctionValues
-    tmp_values::V_FV    # FunctionValues
-    nurbs_values::V_FV  # FunctionValues
-    geo_mapping::V_GM   # GeometryMapping
-    fqr::FQR            # QuadratureRule
-    detJdV::Vector{T}
-    normals::Vector{Vec{dim,T}}
-
-    current_beo::Base.RefValue{BezierExtractionOperator{T}}
-    current_w::Vector{T}
-    current_facet::Base.RefValue{Int}
+mutable struct BezierFacetValues{FV, GM, FQR, dim, T, V_FV<:AbstractVector{FV}, V_GM<:AbstractVector{GM}} <: Ferrite.AbstractFacetValues
+    const bezier_values::V_FV # FunctionValues
+    const tmp_values::V_FV    # FunctionValues
+    const nurbs_values::V_FV  # FunctionValues
+    const geo_mapping::V_GM   # GeometryMapping
+    const fqr::FQR            # QuadratureRule
+    const detJdV::Vector{T}
+    const normals::Vector{Vec{dim,T}}
+    current_beo::BezierExtractionOperator{T}
+    const current_w::Vector{T}
+    current_facet::Int
 end
 
 Ferrite.shape_value_type(cv::BezierCellValues) = Ferrite.shape_value_type(cv.bezier_values)
@@ -66,7 +64,7 @@ function BezierCellValues(::Type{T}, qr::QuadratureRule, ip_fun::Interpolation, 
     fun_values = FunctionValues{FunDiffOrder}(T, ip_fun, qr, ip_geo)
     detJdV = DetJdV ? fill(T(NaN), length(Ferrite.getweights(qr))) : nothing
 
-    undef_beo = Ref(Vector{SparseArrays.SparseVector{T,Int}}(undef,0))
+    undef_beo = Vector{SparseArrays.SparseVector{T,Int}}(undef,0)
     undef_w   = NaN .* zeros(Float64, Ferrite.getngeobasefunctions(geo_mapping))
 
     return BezierCellValues(
@@ -93,13 +91,13 @@ function BezierFacetValues(::Type{T}, fqr::FacetQuadratureRule, ip_fun::Interpol
     max_nquadpoints = maximum(qr->length(Ferrite.getweights(qr)), fqr.facet_rules)
     detJdV  = fill(T(NaN), max_nquadpoints)
     normals = fill(zero(Vec{sdim, T}) * T(NaN), max_nquadpoints)
-    undef_beo = Ref(Vector{SparseArrays.SparseVector{T,Int}}(undef,0))
+    undef_beo = Vector{SparseArrays.SparseVector{T,Int}}(undef,0)
     undef_w   = NaN .* zeros(Float64, Ferrite.getngeobasefunctions(first(geo_mapping)))
     return BezierFacetValues(
         fun_values, 
         deepcopy(fun_values), 
         deepcopy(fun_values), 
-        geo_mapping, fqr, detJdV, normals, undef_beo, undef_w, Ref(-1))
+        geo_mapping, fqr, detJdV, normals, undef_beo, undef_w, -1)
 end
 
 function BezierFacetValues(qr::FacetQuadratureRule, ip::Interpolation, args...; kwargs...) 
@@ -161,19 +159,19 @@ Ferrite.get_fun_values(cv::BezierCellValues) = @inbounds cv.nurbs_values
 Ferrite.shape_hessian(fv::BezierFacetValues, q_point::Int, i::Int) = shape_hessian(fv.nurbs_values[Ferrite.getcurrentfacet(fv)], q_point, i)
 Ferrite.shape_hessian(cv::BezierCellValues, q_point::Int, i::Int) = shape_hessian(cv.nurbs_values, q_point, i)
 
-Ferrite.getcurrentfacet(fv::BezierFacetValues) = fv.current_facet[]
+Ferrite.getcurrentfacet(fv::BezierFacetValues) = fv.current_facet
 function Ferrite.set_current_facet!(fv::BezierFacetValues, face_nr::Int)
     checkbounds(Bool, 1:Ferrite.nfacets(fv), face_nr) || throw(ArgumentError("Face index out of range."))
-    fv.current_facet[] = face_nr
+    fv.current_facet = face_nr
 end
 
 function set_bezier_operator!(bcv::BezierCellAndFacetValues, beo::BezierExtractionOperator{T}) where T 
-    bcv.current_beo[]=beo
+    bcv.current_beo=beo
 end
 
 function set_bezier_operator!(bcv::BezierCellAndFacetValues, beo::BezierExtractionOperator{T}, w::Vector{T}) where T 
     bcv.current_w   .= w
-    bcv.current_beo[]=beo
+    bcv.current_beo=beo
 end
 
 #This function can be called when we know that the weights are all equal to one.
@@ -303,7 +301,11 @@ end
 Ferrite.reinit!(cv::BezierCellValues, bc::BezierCoords) = reinit!(cv, nothing, bc)
 
 function Ferrite.reinit!(cv::BezierCellValues, ::Union{Ferrite.AbstractCell, Nothing}, bc::BezierCoords)
-    set_bezier_operator!(cv, bc.beo[], bc.w)
+    if bc.beo === nothing
+        #TODO: If bc.beo === nothing, perhaps we should reinit the normal way like CellValues does?
+        error("The bezierextraction matrix is === nothing.")
+    end
+    set_bezier_operator!(cv, bc.beo, bc.w)
     return reinit!(cv, (bc.xb, bc.wb))
 end
 
@@ -325,7 +327,7 @@ function Ferrite.reinit!(cv::BezierCellValues, (x,w)::CoordsAndWeight)
         if cv.detJdV !== nothing
             Ferrite.apply_mapping!(cv.tmp_values, q_point, mapping)
         end
-        _bezier_transform(cv.nurbs_values, cv.tmp_values, q_point, cv.current_beo[], cv.current_w)
+        _bezier_transform(cv.nurbs_values, cv.tmp_values, q_point, cv.current_beo, cv.current_w)
     end
     return nothing
 end
@@ -333,7 +335,7 @@ end
 Ferrite.reinit!(fv::BezierFacetValues, bc::BezierCoords, facet_nr::Int) = reinit!(fv, nothing, bc, facet_nr)
 
 function Ferrite.reinit!(cv::BezierFacetValues, _, bc::BezierCoords, face_nr::Int)
-    set_bezier_operator!(cv, bc.beo[], bc.w)
+    set_bezier_operator!(cv, bc.beo, bc.w)
     return reinit!(cv, (bc.xb, bc.wb), face_nr)
 end
 
@@ -361,7 +363,7 @@ function Ferrite.reinit!(fv::BezierFacetValues, (x,w)::CoordsAndWeight, face_nr:
 
         _compute_intermidiate!(tmp_values, bezier_values, geo_mapping, q_point, w)
         Ferrite.apply_mapping!(tmp_values, q_point, mapping)
-        _bezier_transform(nurbs_values, tmp_values, q_point, fv.current_beo[], fv.current_w)
+        _bezier_transform(nurbs_values, tmp_values, q_point, fv.current_beo, fv.current_w)
     end
     return nothing
 end
@@ -570,127 +572,6 @@ function Ferrite.calculate_mapping(geo_mapping::Ferrite.GeometryMapping{2}, q_po
     return Ferrite.MappingValues(J, H)
 end
 
-"""
-Ferrite.reinit!(cv::Ferrite.CellVectorValues{dim}, xᴮ::AbstractVector{Vec{dim,T}}, w::AbstractVector{T}) where {dim,T}
-
-Similar to Ferrite's reinit method, but in IGA with NURBS, the weights is also needed.
-    `xᴮ` - Bezier coordinates
-    `w`  - weights for nurbs mesh (not bezier weights)
-"""
-#=function _reinit_nurbs!(
-    cv_nurbs::Ferrite.AbstractValues, cv_bezier::Ferrite.AbstractValues, 
-    d²Bdξ²_geom, d²Bdξ²_func, d²Ndξ²_nurbs, d²NdX²_nurbs,
-    xᴮ::AbstractVector{Vec{dim,T}}, w::AbstractVector{T}, cb::Int = 1) where {dim,T}
-
-    n_geom_basefuncs = Ferrite.getngeobasefunctions(cv_bezier)
-    n_func_basefuncs = Ferrite.getnbasefunctions(cv_bezier)
-    @assert length(xᴮ) == n_geom_basefuncs == length(w)
-    @assert typeof(cv_nurbs) == typeof(cv_bezier)
-
-    hessian = true
-    B =  cv_bezier.M
-    dBdξ = cv_bezier.dMdξ
-
-    is_vector_valued = first(cv_nurbs.N) isa Tensor
-    is_vector_valued  && @assert eltype(d²Bdξ²_func) <: Tensor{3}
-    !is_vector_valued && @assert eltype(d²Bdξ²_func) <: Tensor{2}
-
-    qrweights = cv_bezier isa Ferrite.FacetValues ? Ferrite.getweights(cv_bezier.qr, cb) : Ferrite.getweights(cv_bezier.qr)
-    for (i,qr_w) in pairs(qrweights)
-
-        W = zero(T)
-        dWdξ = zero(Vec{dim,T})
-        d²Wdξ² = zero(Tensor{2,dim,T})
-        for j in 1:n_geom_basefuncs
-            W      += w[j]*B[j, i, cb]
-            dWdξ   += w[j]*dBdξ[j, i, cb]
-            if hessian
-                d²Wdξ² += w[j]*d²Bdξ²_geom[j, i, cb]
-            end
-        end
-
-        J = zero(Tensor{2,dim})
-        H = zero(Tensor{3,dim})
-        for j in 1:n_geom_basefuncs
-            S = W^2
-            Fi = dBdξ[j, i, cb]*W - B[j, i, cb]*dWdξ
-            dRdξ = Fi/S
-
-            #Jacobian
-            J += xᴮ[j] ⊗ (w[j]*dRdξ)
-
-            #Hessian
-            if hessian
-                Fi_j = (d²Bdξ²_geom[j, i, cb]*W + dBdξ[j, i, cb]⊗dWdξ) - (dWdξ⊗dBdξ[j, i, cb] + B[j, i, cb]*d²Wdξ²)
-                S_j = 2*W*dWdξ
-
-                d²Rdξ² = (Fi_j*S - Fi⊗S_j)/S^2
-                H += xᴮ[j] ⊗ (w[j]*d²Rdξ²)
-            end
-        end
-
-        #Store nurbs
-        for j in 1:n_func_basefuncs
-            if is_vector_valued
-                cv_nurbs.dNdξ[j, i, cb] = inv(W)*cv_bezier.dNdξ[j, i, cb] - inv(W^2) * cv_bezier.N[j, i, cb] ⊗ dWdξ
-                
-                if hessian
-                    _B = cv_bezier.N[j, i, cb]
-                    _dBdξ = cv_bezier.dNdξ[j, i, cb]
-                    _d²Bdξ² = d²Bdξ²_func[j, i, cb]
-                    tmp = _dBdξ⊗dWdξ
-                    tmp = permutedims(tmp, (1,3,2))
-                    tmp = Tensor{3,dim}(tmp)
-
-                    Fij = _dBdξ*W - _B⊗dWdξ
-                    S = W^2
-                    Fij_k = (_d²Bdξ²*W + _dBdξ⊗dWdξ) - (tmp + _B⊗d²Wdξ²)
-                    S_k = 2*W*dWdξ
-                        
-                    d²Ndξ²_nurbs[j, i, cb] = (Fij_k*S - Fij⊗S_k)/S^2
-                end
-            else
-                _B = cv_bezier.N[j, i, cb]
-                _dBdξ = cv_bezier.dNdξ[j, i, cb]
-                S = W^2
-                Fi = _dBdξ*W - _B⊗dWdξ
-                #cv_nurbs.dNdξ[j, i, cb] = inv(W)*cv_bezier.dNdξ[j, i, cb] - inv(W^2) * cv_bezier.N[j, i, cb] * dWdξ
-                cv_nurbs.dNdξ[j, i, cb] = Fi/S
-
-                if hessian
-                    _d²Bdξ² = d²Bdξ²_func[j, i, cb]
-                    S = W^2
-                    Fi = _dBdξ*W - _B⊗dWdξ
-                    Fi_j = (_d²Bdξ²*W + _dBdξ⊗dWdξ) - (dWdξ⊗_dBdξ + _B⊗d²Wdξ²)
-                    S_j = 2*W*dWdξ
-                    d²Ndξ²_nurbs[j, i, cb] = (Fi_j*S - Fi⊗S_j)/S^2
-                end
-
-            end
-            cv_nurbs.N[j,i,cb] = cv_bezier.N[j, i, cb]/W
-        end
-
-        if isa(cv_bezier, Ferrite.AbstractFaceValues)
-            weight_norm = Ferrite.weighted_normal(J, cv_bezier, cb)
-            cv_bezier.normals[i] = weight_norm / norm(weight_norm)
-            detJ = norm(weight_norm)
-        else
-            detJ = det(J)
-        end
-
-#        detJ > 0.0 || throw(ArgumentError("det(J) is not positive: det(J) = $(detJ)"))
-        cv_bezier.detJdV[i,cb] = detJ * qr_w
-        Jinv = inv(J)
-        for j in 1:n_func_basefuncs
-            cv_nurbs.dNdx[j, i, cb] = cv_nurbs.dNdξ[j, i, cb] ⋅ Jinv
-            if hessian
-                FF = cv_nurbs.dNdx[j, i, cb] ⋅ H
-                d²NdX²_nurbs[j, i, cb] = Jinv' ⋅ d²Ndξ²_nurbs[j, i, cb] ⋅ Jinv - Jinv'⋅FF⋅Jinv
-            end
-        end
-    end
-end
-=#
 
 function Base.show(io::IO, m::MIME"text/plain", fv::BezierFacetValues)
     println(io, "BezierFacetValues with")

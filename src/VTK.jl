@@ -10,17 +10,19 @@ end
 
 # Store the Ferrite to vtk order in a cache for specific cell type
 let cache = Dict{Type{<:BezierCell}, Vector{Int}}()
-    global function _iga_to_vtkorder(celltype::Type{<:BezierCell{shape,order,N}}) where {order,shape,N}
-        get!(cache, celltype) do 
+    global function Ferrite.nodes_to_vtkorder(cell::BezierCell{shape,order,N}) where {order,shape,N}
+        celltype = typeof(cell)
+        reorder = get!(cache, celltype) do 
             if shape == RefHexahedron
                 igaorder = _bernstein_ordering(celltype)
                 vtkorder = _vtk_ordering(celltype)
 
-                return [findfirst(ivtk-> ivtk == iiga, vtkorder) for iiga in igaorder]
+                [findfirst(ivtk-> ivtk == iiga, vtkorder) for iiga in igaorder]
             else
-                return collect(1:N)
+                collect(1:N)
             end
         end
+        return cell.nodes[reorder]
     end
 end
 
@@ -60,53 +62,51 @@ function Base.show(io::IO, ::MIME"text/plain", vtk::VTKIGAFile)
     return nothing
 end
 
-function _create_iga_vtk_grid(filename, grid::BezierGrid{sdim,C,T}; kwargs...) where {sdim,C,T}
-    ncells = Ferrite.getncells(grid)
-    
-    cls = WriteVTK.MeshCell[]
-    beziercoords = Vec{sdim,T}[]
-    weights = T[]
-    cellorders = Int[]
+function _create_iga_vtk_grid(filename, grid::BezierGrid{dim,C,T}; kwargs...) where {dim,C,T}
+    cls = Vector{WriteVTK.MeshCell}(undef, getncells(grid))
+    cellnodes = Vector{UnitRange{Int}}(undef, getncells(grid))
+    ncoords = sum(Ferrite.nnodes, getcells(grid))
+    coords = zeros(T, dim, ncoords)
+    weights = zeros(T, dim, ncoords)
+    node_mapping = zeros(Int, ncoords)
+    icoord = 0
 
-    # Assuming uniform grid cell types for arrays sizing
-    sample_cell = first(grid.cells)
-    nnodes_per_cell = Ferrite.nnodes(sample_cell)
-
-    bcoords = zeros(Vec{sdim,T}, nnodes_per_cell)
-    coords  = zeros(Vec{sdim,T}, nnodes_per_cell)
-    wb = zeros(T, nnodes_per_cell)
-    w  = zeros(T, nnodes_per_cell)
-
-    cellnodes = Vector{UnitRange{Int}}(undef, ncells)
-    node_mapping = Int[]
-
-    offset = 0
-    for cellid in 1:ncells
-        cell = grid.cells[cellid]
-        vtktype = Ferrite.cell_to_vtkcell(typeof(cell))
-        reorder = _iga_to_vtkorder(typeof(cell))
-
-        for p in getorders(cell)
-            push!(cellorders, p)
+    nnodes_per_cell = 27; #Some init guess
+    cell_bezier_coords = zeros(Vec{dim,T}, nnodes_per_cell)
+    cell_nurbs_coords  = zeros(Vec{dim,T}, nnodes_per_cell)
+    cell_bezier_weights = zeros(T, nnodes_per_cell)
+    cell_nurbs_weights  = zeros(T, nnodes_per_cell)
+    for cellid in 1:getncells(grid)
+        cell = getcells(grid, cellid)
+        CT = typeof(cell)
+        vtk_celltype = Ferrite.cell_to_vtkcell(CT)
+        n = length(cell.nodes)
+        resize!(cell_bezier_coords, n); resize!(cell_nurbs_coords, n); resize!(cell_bezier_weights, n); resize!(cell_nurbs_weights, n);
+        get_bezier_coordinates!(cell_bezier_coords, cell_bezier_weights, cell_nurbs_coords, cell_nurbs_weights, grid, cellid)
+        cellnodes[cellid] = (1:n) .+ icoord
+        let icoord = icoord
+            vtk_cellnodes = Ferrite.nodes_to_vtkorder(CT((ntuple(i -> i + icoord, n))))
+            cls[cellid] = WriteVTK.MeshCell(vtk_celltype, vtk_cellnodes)
         end
-
-        get_bezier_coordinates!(bcoords, wb, coords, w, grid, cellid)
-
-        append!(beziercoords, bcoords)
-        append!(weights, wb)
-        append!(node_mapping, cell.nodes)
-
-        cnodes = (1:length(cell.nodes)) .+ offset
-        cellnodes[cellid] = cnodes
-
-        push!(cls, WriteVTK.MeshCell(vtktype, collect(cnodes[reorder])))
-        offset += length(cell.nodes)
+        for (x, node_idx, wb) in zip(cell_bezier_coords, cell.nodes, cell_bezier_weights)
+            icoord += 1
+            coords[:, icoord] = x
+            node_mapping[icoord] = node_idx
+            weights[icoord] = wb
+        end
     end
     
-    coords_matrix = reshape(reinterpret(T, beziercoords), (sdim, length(beziercoords)))
-    vtkfile = WriteVTK.vtk_grid(filename, coords_matrix, cls; kwargs...)
+    vtkfile = WriteVTK.vtk_grid(filename, coords, cls; kwargs...)
     vtkfile["RationalWeights", WriteVTK.VTKPointData()] = weights
     
+    # If we in the future allow for different orders in each direction,
+    # we have to add the cell orders to the vtk file
+    #for p in getorders(cell)
+    #    push!(cellorders, p)
+    #end
+    # ...and
+    #vtk["HigherOrderDegrees", VTKCellData()] = [2 3 0]
+
     return vtkfile, cellnodes, node_mapping
 end
 
@@ -164,7 +164,9 @@ function evaluate_at_discontinuous_vtkgrid_nodes_iga(
         ip_geo = Ferrite.geometric_interpolation(CT)
         local_node_coords = Ferrite.reference_coordinates(ip_geo)
         qr = QuadratureRule{Ferrite.getrefshape(ip)}(zeros(length(local_node_coords)), local_node_coords)
-        cv = BezierCellValues(qr, ip, ip_geo; update_detJdV = false, update_gradients = false)
+        # The call to CellValues below will create either a CellValue or a BezierCellValue depending on interpolation type
+        # TODO: It would be better to have an interface for creating cell values, e.g. create_cellvalue(qr, ip, ip_geo; ...)
+        cv = CellValues(qr, ip, ip_geo; update_detJdV = false, update_gradients = false)
         _evaluate_at_discontinuous_vtkgrid_nodes_iga!(data, sdh, u, cv, cellnodes, drange)
     end
     return data
@@ -172,18 +174,22 @@ end
 
 function _evaluate_at_discontinuous_vtkgrid_nodes_iga!(
     data::Matrix, sdh::Ferrite.SubDofHandler,
-    u::AbstractVector{S}, cv::BezierCellValues, cellnodes, drange
+    u::AbstractVector{S}, cv::Ferrite.AbstractCellValues, cellnodes, drange
 ) where {S}
     maybe_is_projector = !(S <: AbstractFloat)
     n_base = length(drange)
     ue = zeros(S, n_base)
     dofs = zeros(Int, Ferrite.ndofs_per_cell(sdh))
     bcoords = getcoordinates(sdh.dh.grid, first(sdh.cellset))
-    
+
+    _reinit!(cv::Ferrite.AbstractCellValues, cell::Optional{Ferrite.AbstractCell}, coords::BezierCoords) = reinit!(cv, cell, coords.x)
+    _reinit!(cv::BezierCellValues, cell::Optional{Ferrite.AbstractCell}, coords::BezierCoords) = reinit!(cv, cell, coords)
+
     for cellid in sdh.cellset
+        cell = getcells(sdh.dh.grid, cellid)
         getcoordinates!(bcoords, sdh.dh.grid, cellid)
         celldofs!(dofs, sdh, cellid)
-        reinit!(cv, bcoords)
+        _reinit!(cv, cell, bcoords)
         
         for (i, I) in pairs(drange)
             ue[i] = u[dofs[I]]
