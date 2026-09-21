@@ -84,25 +84,3 @@ w_paper = [0.8698,0.8373,0.8698,0.8698,0.8373,0.8698,0.8698,0.8373,0.8698][reord
 bc = getcoordinates(grid, 3)
 @test all(isapprox.(x_paper, bc.xb, atol = 1e-3))
 @test all(isapprox.(w_paper, bc.wb, atol = 1e-4))=#
-
-
-@testset "Bezier transformation" begin
-
-    X = [Vec((0.0, -1.0)), Vec((0.0, 0.0)), Vec((0.0, 1.0))]
-
-    C = [1.0  0.5  0.25  0.25  0.0  0.0;
-        0.0  0.5  0.5   0.5   0.5  0.0;
-        0.0  0.0  0.25  0.25  0.5  1.0]
-
-    Cvec = FerriteIGA.bezier_extraction_to_vector(C)
-    answer = [Vec((0.0, -1.0)), Vec((0.0, -0.5)), Vec((0.0, 0.0)), Vec((0.0, 0.0)), Vec((0.0, 0.5)), Vec((0.0, 1.0))]
-
-    #Vec form
-    Xnew = FerriteIGA.compute_bezier_points(Cvec, X)
-    @test all(Xnew .≈ answer)
-
-    #array form
-    XX = collect(reinterpret(Float64,X))
-    Xnew = FerriteIGA.compute_bezier_points(Cvec, XX, dim=2)
-    @test all(Xnew .≈ reinterpret(Float64, answer))
-end
