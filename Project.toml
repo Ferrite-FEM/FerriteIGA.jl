@@ -17,4 +17,9 @@ Tensors = "48a634ad-e948-5137-8d70-aa71f2a747f4"
 WriteVTK = "64499a7a-5c06-52f2-abe2-ccb03c286192"
 
 [compat]
+Ferrite = "1.2"
+OrderedCollections = "1, 2"
+Reexport = "1"
+Tensors = "1"
 WriteVTK = "1.13"
+julia = "1.10"
