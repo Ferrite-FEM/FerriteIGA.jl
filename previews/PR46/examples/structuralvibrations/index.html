@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Structural vibrations · FerriteIGA</title><meta name="title" content="Structural vibrations · FerriteIGA"/><meta property="og:title" content="Structural vibrations · FerriteIGA"/><meta property="twitter:title" content="Structural vibrations · FerriteIGA"/><meta name="description" content="Documentation for FerriteIGA."/><meta property="og:description" content="Documentation for FerriteIGA."/><meta property="twitter:description" content="Documentation for FerriteIGA."/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.63.2/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../../">FerriteIGA</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><span class="tocitem">Manual</span><ul><li><a class="tocitem" href="../../splines/">Splines</a></li><li><a class="tocitem" href="../../meshes/">Meshes</a></li><li><a class="tocitem" href="../../bezier_extraction/">Bezier extraction</a></li></ul></li><li><span class="tocitem">Examples</span><ul><li><a class="tocitem" href="../plate_with_hole/">Infinite plate with hole</a></li><li class="is-active"><a class="tocitem" href>Structural vibrations</a><ul class="internal"><li><a class="tocitem" href="#Main-code"><span>Main code</span></a></li><li><a class="tocitem" href="#Finite-element-solution"><span>Finite element solution</span></a></li><li><a class="tocitem" href="#Isogeometric-solution"><span>Isogeometric solution</span></a></li><li><a class="tocitem" href="#Results"><span>Results</span></a></li></ul></li><li><a class="tocitem" href="../kirchhoff_plate/">Kirchhoff plate</a></li></ul></li><li><span class="tocitem">API</span><ul><li><a class="tocitem" href="../../api/">API</a></li><li><a class="tocitem" href="../../nurbsmesh/">NURBSMesh</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Examples</a></li><li class="is-active"><a href>Structural vibrations</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Structural vibrations</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/Ferrite-FEM/FerriteIGA.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/Ferrite-FEM/FerriteIGA.jl/blob/master/docs/src/literate/structuralvibrations.jl" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="structural_vibrations"><a class="docs-heading-anchor" href="#structural_vibrations">Structural vibrations</a><a id="structural_vibrations-1"></a><a class="docs-heading-anchor-permalink" href="#structural_vibrations" title="Permalink"></a></h1><p>In this example, we will compare traditional Finite Element Method (FEM) with Isogeometric Analysis (IGA) for analysing structural vibration problems. We aim to replicate the results from <strong>Cottrell, J. et al, Isogeometric analysis of structural vibrations, In Computer Methods in Applied Mechanics and Engineering <a href="https://doi.org/10.1016/j.cma.2005.09.027">https://doi.org/10.1016/j.cma.2005.09.027</a></strong></p><p>Consider the structural vibrations of an elastic rod of unit length, whose natural frequencies and modes are goverened by:</p><p class="math-container">\[u_{,xx} + \omega_n^2 u = 0, \quad x \in (0,1)\]</p><p>subjected to boundary conditions:</p><p class="math-container">\[u(0) = u(1) = 0\]</p><p>where <span>$u$</span> is the displacement field, and <span>$\omega_n$</span> is n:th natural frequency.</p><p>After discretisation, we formulate the generalised eigenvalue problem, which allows us to solve for the natural frequencies and modes <span>$\boldsymbol{\phi}_n$</span>:</p><p class="math-container">\[(\boldsymbol{K} - \omega^2_n \boldsymbol{M}) \boldsymbol{\phi}_n = 0.\]</p><p>Here, <span>$\boldsymbol{K}$</span> and <span>$\boldsymbol{M}$</span> are the standard stiffness and mass matrices.</p><h2 id="Main-code"><a class="docs-heading-anchor" href="#Main-code">Main code</a><a id="Main-code-1"></a><a class="docs-heading-anchor-permalink" href="#Main-code" title="Permalink"></a></h2><p>Per usual, we first load the relevant packages</p><pre><code class="language-julia hljs">using Ferrite, FerriteIGA, LinearAlgebra, Plots</code></pre><p>Next we define the element routine used to compute the element stiffness and mass matrices</p><pre><code class="language-julia hljs">function stiffness_and_mass_matrix!(ke, me, cv)
+    for qp in 1:getnquadpoints(cv)
+        dV = getdetJdV(cv,qp)
+        for i in 1:getnbasefunctions(cv)
+            for j in 1:getnbasefunctions(cv)
+                ke[i,j] += shape_gradient(cv, qp, i) ⋅ shape_gradient(cv, qp, j) * dV
+                me[i,j] += shape_value(cv, qp, i) * shape_value(cv, qp, j) * dV
+            end
+        end
+    end
+end;</code></pre><p>We also create a function for computing the natural frequencies <span>$\omega_n$</span>. The input for the function is the grid (either a FEM or IGA mesh), and the corresponing cellvalues and interpolations (either Lagrange or IGAInterpolaiton).</p><pre><code class="language-julia hljs">function compute_eigenvalues(grid, cellvalues, ip)
+
+    #Create dofhandler
+    dh = DofHandler(grid)
+    add!(dh, :u, ip)
+    close!(dh)
+
+    #initlize matrices
+    nbf = getnbasefunctions(ip)
+    ke = zeros(nbf,nbf)
+    me = zeros(nbf,nbf)
+    K = allocate_matrix(dh)
+    M = allocate_matrix(dh)
+
+    #assemble system
+    assembler_K = start_assemble(K)
+    assembler_M = start_assemble(M)
+    for cellid in 1:getncells(grid)
+        fill!(ke, 0.0)
+        fill!(me, 0.0)
+        coords = getcoordinates(grid, cellid)
+        dofs = celldofs(dh, cellid)
+
+        reinit!(cellvalues, coords)
+        stiffness_and_mass_matrix!(ke, me, cellvalues)
+
+        assemble!(assembler_K, dofs, ke)
+        assemble!(assembler_M, dofs, me)
+    end
+
+    #apply BC
+    ch = ConstraintHandler(dh)
+    add!(ch, Dirichlet(:u, getfacetset(grid, &quot;left&quot;), x-&gt;(0.0,)))
+    add!(ch, Dirichlet(:u, getfacetset(grid, &quot;right&quot;), x-&gt;(0.0,)))
+    close!(ch)
+    apply!(K, ch)
+
+    #Solve generlized eigenvalue problem
+    λ, ϕ = eigen(Matrix(K), Matrix(M)) #Note, we need to convert to full matrices
+    ω = sqrt.(λ)
+    return ω
+end;</code></pre><p>We can now solve for the natural frequencies for both the FEM and IGA case. We will use quadratic shape functions and a total of 999 DOFs.</p><h2 id="Finite-element-solution"><a class="docs-heading-anchor" href="#Finite-element-solution">Finite element solution</a><a id="Finite-element-solution-1"></a><a class="docs-heading-anchor-permalink" href="#Finite-element-solution" title="Permalink"></a></h2><pre><code class="language-julia hljs">const N = 999    # Number of desired dofs
+const order = 2  # Order of polynomial
+const L = 1.0    # Length of beam
+const nel_fem = (N-1) ÷ order; # Number of elements
+grid = generate_grid(Line, (nel_fem,), Vec(0.0), Vec(L))
+
+ip = Lagrange{RefLine,order}()
+qr = QuadratureRule{RefLine}(6)
+cellvalues = CellValues(qr, ip)
+
+ω_fem = compute_eigenvalues(grid, cellvalues, ip);</code></pre><h2 id="Isogeometric-solution"><a class="docs-heading-anchor" href="#Isogeometric-solution">Isogeometric solution</a><a id="Isogeometric-solution-1"></a><a class="docs-heading-anchor-permalink" href="#Isogeometric-solution" title="Permalink"></a></h2><pre><code class="language-julia hljs">const nel_iga = N-order # Number of elements
+grid = generate_grid(BezierCell{RefLine,order}, (nel_iga,), Vec(0.0), Vec(L))
+
+ip = IGAInterpolation{RefLine,order}()
+qr = QuadratureRule{RefLine}(6)
+cellvalues = BezierCellValues(qr, ip)
+
+ω_iga = compute_eigenvalues(grid, cellvalues, ip);</code></pre><h2 id="Results"><a class="docs-heading-anchor" href="#Results">Results</a><a id="Results-1"></a><a class="docs-heading-anchor-permalink" href="#Results" title="Permalink"></a></h2><p>Now, we can plot and compare the normalised solutions. From the results, we observe that the accuracy of the FEM solution diminishes significantly for <span>$n/N&gt;0.5$</span>. This highlights the advantageous properties of IGA for structural dynamics problems.</p><pre><code class="language-julia hljs">analytical_ω_f(n) = π*n
+ω_analytical = analytical_ω_f.(1:N)
+
+normalised_ω_fem  = ω_fem ./ ω_analytical
+normalised_ω_iga  = ω_iga ./ ω_analytical
+
+n_range = range(0,1,N)
+fig = plot(; title=&quot;Eigenvalues&quot;, ylabel = &quot;Normalised eigenvalue&quot;, xlabel=&quot;Normalised eigen number&quot;)
+plot!(fig, n_range, normalised_ω_fem, label=&quot;Quadratic FEM&quot;)
+plot!(fig, n_range, normalised_ω_iga, label=&quot;Quadratic IGA&quot;)</code></pre><img src="88c3b26a.svg" alt="Example block output"/><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../plate_with_hole/">« Infinite plate with hole</a><a class="docs-footer-nextpage" href="../kirchhoff_plate/">Kirchhoff plate »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.19.0 on <span class="colophon-date" title="Tuesday 22 September 2026 10:10">Tuesday 22 September 2026</span>. Using Julia version 1.12.7.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
