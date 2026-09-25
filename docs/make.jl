@@ -13,7 +13,9 @@ makedocs(
     sitename = "FerriteIGA",
     format = Documenter.HTML(),
     doctest = false,
-    warnonly = true,
+    modules = [FerriteIGA],
+    checkdocs = :exports,
+    warnonly = Documenter.except(:missing_docs),
     pages = Any[
         "Home" => "index.md",
         "Manual" => ["splines.md", "meshes.md", "bezier_extraction.md"],
