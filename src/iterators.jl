@@ -1,3 +1,11 @@
+"""
+	IGACellCache(dh::DofHandler)
+	IGACellCache(dh::DofHandler, flags::UpdateFlags)
+
+Ferrite-style cell cache for a `BezierGrid`. After `reinit!(cache, cellid)`,
+use `getcoordinates(cache)` for `BezierCoords`, `celldofs(cache)`, and
+`getnodes(cache)` like Ferrite's `CellCache`.
+"""
 struct IGACellCache{X,G<:Ferrite.AbstractGrid,DH<:Union{Ferrite.AbstractDofHandler,Nothing}}
     flags::UpdateFlags
     grid::G
@@ -47,8 +55,14 @@ Ferrite.celldofs(cc::IGACellCache) = cc.dofs
 Ferrite.cellid(cc::IGACellCache) = cc.cellid[]
 
 
-#
-# Copy FaceCache from ferrite
+"""
+	IGAFaceCache(dh::DofHandler)
+	IGAFaceCache(dh::DofHandler, flags::UpdateFlags)
+
+Facet cache for a `BezierGrid`. After
+`reinit!(cache, FacetIndex(cellid, faceid))`, coordinate and dof accessors 
+are delegated to the [`IGACellCache`](@ref).
+"""
 struct IGAFaceCache{CC}
     cc::CC  # const for julia > 1.8
     dofs::Vector{Int} # aliasing cc.dofs

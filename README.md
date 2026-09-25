@@ -17,10 +17,10 @@ Spline functions overlap several neighbouring elements. A finite element code ex
 
 ## Installation
 
-The package is unregistered. From the Pkg REPL,
+From the Pkg REPL,
 
 ```
-pkg> add https://github.com/Ferrite-FEM/FerriteIGA.jl
+pkg> add FerriteIGA
 ```
 
 Ferrite is installed as a dependency.
