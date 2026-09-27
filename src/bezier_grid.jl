@@ -82,18 +82,18 @@ function Base.show(io::IO, ::MIME"text/plain", grid::BezierGrid)
 end
 
 """
-	getweights!(w, grid::BezierGrid, cellid)
-	getweights!(w, grid::BezierGrid, cell)
+	get_nurbs_weights!(w, grid::BezierGrid, cellid)
+	get_nurbs_weights!(w, grid::BezierGrid, cell)
 
 Fill `w` with the NURBS weights for the given cell (by id or cell object).
 `w` must be at least as long as the number of control points on the cell.
 """
-Base.@propagate_inbounds function getweights!(w::Vector, grid::BezierGrid, cellid::Int)
+Base.@propagate_inbounds function get_nurbs_weights!(w::Vector, grid::BezierGrid, cellid::Int)
     cell = grid.cells[cellid]
-    getweights!(w, grid, cell)
+    get_nurbs_weights!(w, grid, cell)
 end
 
-Base.@propagate_inbounds function getweights!(w::Vector, grid::BezierGrid, cell::Ferrite.AbstractCell) 
+Base.@propagate_inbounds function get_nurbs_weights!(w::Vector, grid::BezierGrid, cell::Ferrite.AbstractCell) 
 	node_ids = Ferrite.get_node_ids(cell)
 	nnodes = length(node_ids)
 	@boundscheck checkbounds(Bool, w, 1:nnodes)
@@ -154,7 +154,7 @@ function get_bezier_coordinates!(xb::AbstractVector{Vec{dim,T}},
     n = length(xb)
 	
 	Ferrite.getcoordinates!(x, grid.grid, ic)
-	getweights!(w, grid, ic)
+	get_nurbs_weights!(w, grid, ic)
 
 	C = grid.beo[ic]
 	if C === nothing #This is not an IGA cell

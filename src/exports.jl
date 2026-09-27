@@ -6,7 +6,7 @@ BezierCoords,
 BezierGrid,
 BezierExtractionOperator,
 # Grid coordinates and functions
-getweights!,
+get_nurbs_weights!,
 get_extraction_operator,
 get_bezier_coordinates,
 get_bezier_coordinates!,
