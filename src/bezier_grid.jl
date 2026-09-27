@@ -82,9 +82,11 @@ function Base.show(io::IO, ::MIME"text/plain", grid::BezierGrid)
 end
 
 """
-	getweights!(w::Vector{T}, grid::BezierGrid, cellid::Int) where {T} 
+	getweights!(w, grid::BezierGrid, cellid)
+	getweights!(w, grid::BezierGrid, cell)
 
-Returns the weights (for the nurbs interpolation) for cell with id `cellid`.
+Fill `w` with the NURBS weights for the given cell (by id or cell object).
+`w` must be at least as long as the number of control points on the cell.
 """
 Base.@propagate_inbounds function getweights!(w::Vector, grid::BezierGrid, cellid::Int)
     cell = grid.cells[cellid]
@@ -100,6 +102,11 @@ Base.@propagate_inbounds function getweights!(w::Vector, grid::BezierGrid, cell:
     end
 end
 
+"""
+	get_nurbs_weights(grid::BezierGrid, cellid)
+
+Return a new vector of NURBS weights for cell `cellid`.
+"""
 function get_nurbs_weights(grid::BezierGrid, ic::Int)
 	nodeids = collect(grid.cells[ic].nodes)
 	return grid.weights[nodeids]
@@ -128,6 +135,16 @@ function Ferrite.getcoordinates(grid::BezierGrid{dim,C,T}, ic::Int) where {dim,C
 	return bc
 end
 
+"""
+	get_bezier_coordinates!(xb, wb, x, w, grid::BezierGrid, cellid)
+
+In-place fill of NURBS and Bézier data for cell `cellid`.
+
+- `x`, `w` are the NURBS control points and weights respectively.
+- `xb`, `wb` are the above transformed in Bernstein basis from the Bezier extraction operator.
+
+If the cell has no extraction operator, `xb`/`wb` is made as a copy of `x`/`w`.
+"""
 function get_bezier_coordinates!(xb::AbstractVector{Vec{dim,T}}, 
 								 wb::AbstractVector{T}, 
 	                             x::AbstractVector{Vec{dim,T}},  
@@ -150,6 +167,13 @@ function get_bezier_coordinates!(xb::AbstractVector{Vec{dim,T}},
 	return nothing
 end
 
+"""
+	get_bezier_coordinates(grid::BezierGrid, cellid)
+
+Allocate and return `(xb, wb, x, w)` for cell `cellid`:
+Bézier points/weights and NURBS points/weights.
+See [`get_bezier_coordinates!`](@ref).
+"""
 function get_bezier_coordinates(grid::BezierGrid{dim,C,T}, ic::Int) where {dim,C,T}
 
 	n = Ferrite.nnodes_per_cell(grid, ic)
@@ -162,6 +186,11 @@ function get_bezier_coordinates(grid::BezierGrid{dim,C,T}, ic::Int) where {dim,C
 	return xb, wb, x, w
 end
 
+"""
+	get_nurbs_coordinates(grid::BezierGrid, cellid)
+
+Return the NURBS control-point coordinates for cell `cellid`
+"""
 function get_nurbs_coordinates(grid::BezierGrid{dim,C,T}, cell::Int) where {dim,C,T}
     nodeidx = grid.cells[cell].nodes
     return [grid.nodes[i].x for i in nodeidx]::Vector{Vec{dim,T}}
@@ -170,7 +199,8 @@ end
 """
 	get_extraction_operator(grid::BezierGrid, cellid)
 
-Bézier extraction operator for cell `cellid`.
+Bézier extraction operator ``C^e`` for cell `cellid`, or `nothing`
+if the cell is not an IGA cell.
 """
 function get_extraction_operator(grid::BezierGrid, cellid::Int)
 	return grid.beo[cellid]

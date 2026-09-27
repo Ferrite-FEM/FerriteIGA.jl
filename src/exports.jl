@@ -1,37 +1,35 @@
-export 
+export
+# Interpolation and cells
 IGAInterpolation,
-#
-BezierExtractionOperator,
-compute_bezier_points,
-compute_bezier_points!,
-#
 BezierCell,
 BezierCoords,
-BezierGrid, 
+BezierGrid,
+BezierExtractionOperator,
+# Grid coordinates and functions
 getweights!,
-get_extraction_operator, 
-get_bezier_coordinates, 
-get_bezier_coordinates!, 
-get_nurbs_weights, 
+get_extraction_operator,
+get_bezier_coordinates,
+get_bezier_coordinates!,
+get_nurbs_weights,
 get_nurbs_coordinates,
-#
-BezierCellValues, 
-BezierFacetValues, 
+# Cell and facet values
+BezierCellValues,
+BezierFacetValues,
 set_bezier_operator!,
-#
-IGACellCache, 
+# Iteration caches
+IGACellCache,
 IGAFaceCache,
-#
+# Export
 VTKIGAFile,
-#
+# NURBS mesh and refinement
 generate_nurbs_patch,
-NURBSMesh, 
-parent_to_parametric_map, 
+NURBSMesh,
+parent_to_parametric_map,
 eval_parametric_coordinate,
-knotinsertion!, 
-orderelevation!, 
+knotinsertion!,
+orderelevation!,
 smoothnesselevation!,
-knotinsertion, 
-orderelevation, 
+knotinsertion,
+orderelevation,
 smoothnesselevation
 

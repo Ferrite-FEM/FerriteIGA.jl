@@ -161,6 +161,17 @@ function Ferrite.set_current_facet!(fv::BezierFacetValues, face_nr::Int)
     fv.current_facet = face_nr
 end
 
+"""
+	set_bezier_operator!(cv, beo)
+	set_bezier_operator!(cv, beo, w)
+
+Set the current Bézier extraction operator on a `BezierCellValues` or
+`BezierFacetValues`. When NURBS weights `w` are given, they are stored and
+used in `reinit!` to form the rational basis.
+
+Prefer `reinit!(cv, getcoordinates(grid, cellid))`, which sets the operator
+from `BezierCoords` automatically. This method is for manual assembly loops.
+"""
 function set_bezier_operator!(bcv::BezierCellAndFacetValues, beo::BezierExtractionOperator{T}) where T 
     bcv.current_beo=beo
 end
