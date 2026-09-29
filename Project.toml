@@ -1,6 +1,6 @@
 name = "FerriteIGA"
 uuid = "e7b8d123-e02a-40ba-ad18-d3943ed54f1c"
-version = "1.0.0"
+version = "0.3.0"
 authors = ["Elias Börjesson <elias.isak.borjesson@gmail.com>"]
 description = "Isogeometric analysis for the Ferrite finite element library"
 
