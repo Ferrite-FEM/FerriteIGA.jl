@@ -205,7 +205,7 @@ end
     cellid = 1
     nnodes = length(bgrid.cells[cellid].nodes)
     w = zeros(Float64, nnodes)
-    getweights!(w, bgrid, cellid)
+    get_nurbs_weights!(w, bgrid, cellid)
     @test all(w .== 1.0)
 
     C = get_extraction_operator(bgrid, cellid)

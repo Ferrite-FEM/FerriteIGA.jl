@@ -20,9 +20,9 @@ BezierExtractionOperator
 Coordinates, weights, and extraction operators on a [`BezierGrid`](@ref).
 
 ```@docs
-getweights!
-get_nurbs_weights
 get_nurbs_coordinates
+get_nurbs_weights
+get_nurbs_weights!
 get_bezier_coordinates
 get_bezier_coordinates!
 get_extraction_operator
