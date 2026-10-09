@@ -24,7 +24,7 @@ function IGACellCache(dh::DofHandler{dim,G}, flags::UpdateFlags=UpdateFlags()) w
     T = Ferrite.get_coordinate_eltype(grid)
     N = Ferrite.nnodes_per_cell(grid, 1)
     nodes    = zeros(Int, N)
-    coords   = zero_bezier_coord(dim,T,N)
+    coords   = zero_bezier_coord(dim,T,_nbezierpoints(grid, 1),N)
     n        = ndofs_per_cell(dh, 1)
     celldofs = zeros(Int, n)
 
@@ -38,8 +38,7 @@ function Ferrite.reinit!(cc::IGACellCache, i::Int)
         Ferrite.cellnodes!(cc.nodes, cc.grid, i)
     end
     if cc.flags.coords
-        resize_bezier_coord!(cc.bezier_cell_data, Ferrite.nnodes_per_cell(cc.grid, i))
-        getcoordinates!(cc.bezier_cell_data, cc.grid, i)
+        getcoordinates!(cc.bezier_cell_data, cc.grid, i) #Resizes the coordinates
     end
     if cc.dh !== nothing && cc.flags.dofs
         resize!(cc.dofs, ndofs_per_cell(cc.dh, i))

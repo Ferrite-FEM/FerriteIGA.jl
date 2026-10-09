@@ -7,6 +7,11 @@ end
 function Ferrite.cell_to_vtkcell(::Type{<:BezierCell{RefLine,order}}) where {order}
     return VTKCellTypes.VTK_BEZIER_CURVE
 end
+Ferrite.cell_to_vtkcell(::Type{<:TSplineCell{shape,order}}) where {shape,order} = Ferrite.cell_to_vtkcell(BezierCell{shape,order})
+
+#The vtk cell is defined by the Bézier control points, so a T-spline cell is written as a BezierCell
+_vtk_cell(::Type{<:TSplineCell{shape,order}}, nodes::NTuple) where {shape,order} = BezierCell{shape,order}(nodes)
+_vtk_cell(CT::Type{<:Ferrite.AbstractCell}, nodes::NTuple) = CT(nodes)
 
 # Store the Ferrite to vtk order in a cache for specific cell type
 let cache = Dict{Type{<:BezierCell}, Vector{Int}}()
@@ -31,15 +36,16 @@ end
 
 Write a `BezierGrid` to a `.vtu` file.
 """
-struct VTKIGAFile{VTK <: WriteVTK.DatasetFile}
+struct VTKIGAFile{VTK <: WriteVTK.DatasetFile, G <: BezierGrid}
     vtk::VTK
     cellnodes::Union{Vector{UnitRange{Int}}, Nothing}
     node_mapping::Union{Vector{Int}, Nothing}
+    grid::G
 end
 
 function VTKIGAFile(filename::String, grid::BezierGrid; kwargs...)
     vtk, cellnodes, node_mapping = _create_iga_vtk_grid(filename, grid; kwargs...)
-    return VTKIGAFile(vtk, cellnodes, node_mapping)
+    return VTKIGAFile(vtk, cellnodes, node_mapping, grid)
 end
 
 # Makes it possible to use the `do`-block syntax
@@ -55,6 +61,14 @@ end
 
 Base.close(vtk::VTKIGAFile) = (WriteVTK.vtk_save(vtk.vtk); return vtk)
 
+# Make it possible to add a VTKIGAFile to a paraview collection (.pvd) for time series, `pvd[t] = vtk`
+function WriteVTK.collection_add_timestep(pvd::WriteVTK.CollectionFile, datfile::VTKIGAFile, time::Real)
+    return WriteVTK.collection_add_timestep(pvd, datfile.vtk, time)
+end
+function Base.setindex!(pvd::WriteVTK.CollectionFile, datfile::VTKIGAFile, time::Real)
+    return WriteVTK.collection_add_timestep(pvd, datfile, time)
+end
+
 function Base.show(io::IO, ::MIME"text/plain", vtk::VTKIGAFile)
     open_str = isopen(vtk.vtk) ? "open" : "closed"
     filename = vtk.vtk.path
@@ -65,7 +79,7 @@ end
 function _create_iga_vtk_grid(filename, grid::BezierGrid{dim,C,T}; kwargs...) where {dim,C,T}
     cls = Vector{WriteVTK.MeshCell}(undef, getncells(grid))
     cellnodes = Vector{UnitRange{Int}}(undef, getncells(grid))
-    ncoords = sum(Ferrite.nnodes, getcells(grid))
+    ncoords = sum(cellid -> _nbezierpoints(grid, cellid), 1:getncells(grid))
     coords = zeros(T, dim, ncoords)
     weights = zeros(T, dim, ncoords)
     node_mapping = zeros(Int, ncoords)
@@ -81,17 +95,19 @@ function _create_iga_vtk_grid(filename, grid::BezierGrid{dim,C,T}; kwargs...) wh
         CT = typeof(cell)
         vtk_celltype = Ferrite.cell_to_vtkcell(CT)
         n = length(cell.nodes)
-        resize!(cell_bezier_coords, n); resize!(cell_nurbs_coords, n); resize!(cell_bezier_weights, n); resize!(cell_nurbs_weights, n);
+        nb = _nbezierpoints(grid, cellid)
+        resize!(cell_bezier_coords, nb); resize!(cell_nurbs_coords, n); resize!(cell_bezier_weights, nb); resize!(cell_nurbs_weights, n);
         get_bezier_coordinates!(cell_bezier_coords, cell_bezier_weights, cell_nurbs_coords, cell_nurbs_weights, grid, cellid)
-        cellnodes[cellid] = (1:n) .+ icoord
+        cellnodes[cellid] = (1:nb) .+ icoord
         let icoord = icoord
-            vtk_cellnodes = Ferrite.nodes_to_vtkorder(CT((ntuple(i -> i + icoord, n))))
+            vtk_cellnodes = Ferrite.nodes_to_vtkorder(_vtk_cell(CT, ntuple(i -> i + icoord, nb)))
             cls[cellid] = WriteVTK.MeshCell(vtk_celltype, vtk_cellnodes)
         end
-        for (x, node_idx, wb) in zip(cell_bezier_coords, cell.nodes, cell_bezier_weights)
+        for (i, (x, wb)) in enumerate(zip(cell_bezier_coords, cell_bezier_weights))
             icoord += 1
             coords[:, icoord] = x
-            node_mapping[icoord] = node_idx
+            #For T-spline cells, the Bézier points do not correspond to control points
+            node_mapping[icoord] = cell isa TSplineCell ? 0 : cell.nodes[i]
             weights[icoord] = wb
         end
     end
@@ -125,9 +141,45 @@ function Ferrite.write_projection(vtk::VTKIGAFile, proj::Ferrite.L2Projector, va
 end
 
 function Ferrite.write_node_data(vtk::VTKIGAFile, nodedata, name)
-    data = Ferrite._map_to_discontinuous_nodes(vtk.node_mapping, nodedata)
+    if any(iszero, vtk.node_mapping)
+        data = _map_nodedata_with_extraction(vtk, nodedata)
+    else
+        data = Ferrite._map_to_discontinuous_nodes(vtk.node_mapping, nodedata)
+    end
     Ferrite._vtk_write_node_data(vtk.vtk, data, name)
     return vtk
+end
+
+#Map nodal data (control point values) to the Bézier points of T-spline cells with the 
+#rational Bézier extraction, in the same way as the control point coordinates (see transform_coords!).
+function _map_nodedata_with_extraction(vtk::VTKIGAFile, nodedata::AbstractVector{S}) where {S}
+    grid = vtk.grid
+    data = Vector{S}(undef, length(vtk.node_mapping))
+    for cellid in 1:getncells(grid)
+        cell = getcells(grid, cellid)
+        vtknodes = vtk.cellnodes[cellid]
+        beo = grid.beo[cellid]
+        if !(cell isa TSplineCell)
+            for (i, vtknode) in pairs(vtknodes)
+                data[vtknode] = nodedata[vtk.node_mapping[vtknode]]
+            end
+            continue
+        end
+        w = get_nurbs_weights(grid, cellid)
+        wb = zeros(length(vtknodes))
+        db = [zero(S) * 0.0 for _ in vtknodes]
+        for (a, row) in pairs(beo.C)
+            A = cell.nodes[a]
+            for (j, c) in zip(row.nzind, row.nzval)
+                db[j] += c * w[a] * nodedata[A]
+                wb[j] += c * w[a]
+            end
+        end
+        for (j, vtknode) in pairs(vtknodes)
+            data[vtknode] = db[j] / wb[j]
+        end
+    end
+    return data
 end
 
 function Ferrite.write_cell_data(vtk::VTKIGAFile, celldata, name)
@@ -162,7 +214,7 @@ function evaluate_at_discontinuous_vtkgrid_nodes_iga(
         drange = Ferrite.dof_range(sdh, field_idx)
         CT = Ferrite.getcelltype(sdh)
         ip_geo = Ferrite.geometric_interpolation(CT)
-        local_node_coords = Ferrite.reference_coordinates(ip_geo)
+        local_node_coords = Ferrite.reference_coordinates(_bernstein_ip(ip_geo))
         qr = QuadratureRule{Ferrite.getrefshape(ip)}(zeros(length(local_node_coords)), local_node_coords)
         # The call to CellValues below will create either a CellValue or a BezierCellValue depending on interpolation type
         # TODO: It would be better to have an interface for creating cell values, e.g. create_cellvalue(qr, ip, ip_geo; ...)

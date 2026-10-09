@@ -14,7 +14,9 @@ function transform_basis!(
     w = nothing;
     stride::Int = 1,
 ) where {T}
-    @assert size(Nout) == size(Nin)
+    #The number of spline functions (rows of `Nout`) can differ from the number of 
+    #Bernstein functions (rows of `Nin`), e.g. for T-splines.
+    @assert size(Nout, 2) == size(Nin, 2)
     @assert size(Nout, 1) == length(C.C) * stride
     @assert w === nothing || length(w) == length(C.C)
 
@@ -62,7 +64,8 @@ function transform_coords!(
 	C = C.C
     n = length(C)
 
-	@assert length(xb) == n
+	#`x` and `w` are the spline control points of the cell, and `xb` and `wb` are the Bézier control points.
+	@assert length(x) == n
     @assert length(xb) == length(wb)
     @assert length(w) == length(x)
     fill!(xb, zero(Vec{dim,T}))
@@ -204,4 +207,84 @@ function _compute_bezier_extraction_operators(p::Int, knot::Vector{T}) where T
 
 	C = SparseArrays.sparse.(C[1:nb])
 	return C, nb
+end
+"""
+	_insert_knot(U, c, p, u)
+
+Insert the knot `u` once in the knot vector `U` of a univariate B-spline function with coefficients `c` (Boehm's algorithm).
+"""
+function _insert_knot(U::Vector{T}, c::Vector{T}, p::Int, u::T) where T
+	k = searchsortedlast(U, u) #U[k] <= u < U[k+1]
+	n = length(c)
+	cnew = zeros(T, n+1)
+	for i in 1:n+1
+		if i <= k-p
+			cnew[i] = c[i]
+		elseif i <= k
+			α = (u - U[i])/(U[i+p] - U[i])
+			cnew[i] = α*c[i] + (1-α)*c[i-1]
+		else
+			cnew[i] = c[i-1]
+		end
+	end
+	Unew = copy(U)
+	insert!(Unew, k+1, u)
+	return Unew, cnew
+end
+
+"""
+	_bspline_bezier_coefficients(Ξ, p, a, b)
+
+Coefficients of the univariate B-spline basis function with the local knot vector `Ξ` (`p+2` knots),
+restricted to the interval `[a,b]`, in the Bernstein basis of degree `p` on `[a,b]`. The interval must 
+not contain knots of `Ξ` in its interior.
+
+This is univariate Bézier extraction of a single (T-spline) basis function (Scott et al. 2011): the local knot vector is 
+extended to an open knot vector, and the knots `a` and `b` are inserted until they have multiplicity `p`.
+"""
+function _bspline_bezier_coefficients(Ξ::AbstractVector{T}, p::Int, a::T, b::T) where T
+	@assert length(Ξ) == p+2
+	@assert Ξ[1] <= a < b <= Ξ[end]
+	@assert !any(ξ -> a < ξ < b, Ξ)
+
+	#Extended knot vector, where the first and last knot have multiplicity p+1
+	nt = p + 1 - count(==(Ξ[1]), Ξ)
+	ne = p + 1 - count(==(Ξ[end]), Ξ)
+	U = T[fill(Ξ[1], nt); Ξ; fill(Ξ[end], ne)]
+	c = zeros(T, length(U) - p - 1)
+	c[nt+1] = one(T)
+
+	for u in (a, b)
+		for _ in (count(==(u), U) + 1):p
+			U, c = _insert_knot(U, c, p, u)
+		end
+	end
+
+	k = findlast(==(a), U)
+	@assert U[k+1] == b
+	return c[(k-p):k]
+end
+
+"""
+	compute_bezier_extraction_operators(mesh::TSplineMesh)
+
+Compute the Bézier extraction operator of each element of the T-spline. The rows of the operator for element `e`
+correspond to the basis functions `mesh.IEN[e]`, and the columns to the Bernstein basis functions 
+(ordered as in `IGAInterpolation`).
+"""
+function compute_bezier_extraction_operators(mesh::TSplineMesh{sdim,T}) where {sdim,T}
+	p = mesh.order
+	ordering = _bernstein_ordering(Bernstein{RefQuadrilateral,p}())
+	beos = BezierExtractionOperator{T}[]
+	for (e, (ξa, ξb, ηa, ηb)) in enumerate(mesh.elements)
+		rows = SparseVector{T,Int}[]
+		for A in mesh.IEN[e]
+			Ξ, Π = mesh.local_knots[A]
+			c1 = _bspline_bezier_coefficients(Ξ, p, ξa, ξb)
+			c2 = _bspline_bezier_coefficients(Π, p, ηa, ηb)
+			push!(rows, sparsevec(kron(c2, c1)[ordering]))
+		end
+		push!(beos, BezierExtractionOperator(rows))
+	end
+	return beos
 end

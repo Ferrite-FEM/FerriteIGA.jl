@@ -560,3 +560,73 @@ function generate_nurbs_patch(::Val{:cylinder_sector}, nel::NTuple{3,Int}, order
 	
     return mesh
 end
+
+"""
+	generate_tspline_patch(:graded_rectangle, nels_x::Vector{Int}, nels_y::Vector{Int}, order::Int; 
+		size = (1.0, 1.0), cornerpos = (0.0, 0.0), layer_heights)
+
+Generate a `TSplineMesh` of a rectangle, which is divided into horizontal layers (from bottom to top). Layer `k` has 
+height `layer_heights[k]` (equal heights by default) and is divided into `nels_x[k]` equally sized columns and 
+`nels_y[k]` equally sized rows. For example, `nels_x = [4, 8, 16]` gives a mesh which is coarse at the bottom and fine at the top.
+
+Horizontal lines of the T-mesh always span the whole width, while vertical lines only span their layer and end in 
+T-junctions at the layer interfaces. Since all T-junctions are vertical, no horizontal T-junction extension can intersect a vertical
+extension, and the mesh is analysis-suitable for any number of elements in the layers. The boundary is open (interpolatory),
+and the knot values equal the physical coordinates, i.e. the control points are the Greville points.
+"""
+function generate_tspline_patch(s::Symbol, args...; kwargs...)
+	return generate_tspline_patch(Val{s}(), args...; kwargs...)
+end
+
+function generate_tspline_patch(::Val{:graded_rectangle}, nels_x::AbstractVector{Int}, nels_y::AbstractVector{Int}, order::Int; 
+		size::NTuple{2,T} = (1.0, 1.0), cornerpos::NTuple{2,T} = (0.0, 0.0), 
+		layer_heights::AbstractVector{T} = fill(size[2]/length(nels_y), length(nels_y))) where T
+
+	nlayers = length(nels_x)
+	nlayers == length(nels_y) == length(layer_heights) || throw(ArgumentError("nels_x, nels_y and layer_heights must have the same length (the number of layers)."))
+	all(>(0), nels_x) && all(>(0), nels_y) || throw(ArgumentError("The number of elements in each layer must be positive."))
+	sum(layer_heights) ≈ size[2] || throw(ArgumentError("The layer heights must sum to the height of the rectangle."))
+
+	tol = 1e-12 * maximum(size)
+	#Merge values which are equal up to round-off, such that the lines of different layers coincide
+	function unique_values(vals)
+		vals = sort(vals)
+		out = [vals[1]]
+		for v in vals[2:end]
+			v - out[end] > tol && push!(out, v)
+		end
+		return out
+	end
+	findvalue(vals, v) = findfirst(x -> abs(x - v) <= tol, vals)
+
+	x0, x1 = cornerpos[1], cornerpos[1] + size[1]
+	layer_xvals = [collect(range(x0, x1, length = nels_x[k]+1)) for k in 1:nlayers]
+	ybounds = cornerpos[2] .+ [zero(T); cumsum(layer_heights)]
+	ybounds[end] = cornerpos[2] + size[2]
+	layer_yvals = [collect(range(ybounds[k], ybounds[k+1], length = nels_y[k]+1)) for k in 1:nlayers]
+
+	xvals = unique_values(reduce(vcat, layer_xvals))
+	yvals = unique_values(reduce(vcat, layer_yvals))
+
+	#Repeat the boundary values, such that the boundary is open
+	r = order÷2 + 1
+	knots = (
+		[fill(xvals[1], r-1); xvals; fill(xvals[end], r-1)],
+		[fill(yvals[1], r-1); yvals; fill(yvals[end], r-1)],
+	)
+	n1, n2 = length.(knots)
+	ring_x = [1:r; (n1-r+1):n1]
+
+	faces = NTuple{4,Int}[]
+	for j in 1:(n2-1)
+		#The layer of the index row j
+		vmid = 0.5*(knots[2][j] + knots[2][j+1])
+		k = clamp(searchsortedlast(ybounds, vmid), 1, nlayers)
+		lines = sort!(unique!([ring_x; [findvalue(xvals, x) + r - 1 for x in layer_xvals[k]]]))
+		for (i0, i1) in zip(lines[1:end-1], lines[2:end])
+			push!(faces, (i0, i1, j, j+1))
+		end
+	end
+
+	return TSplineMesh(knots, order, faces)
+end

@@ -31,5 +31,14 @@ orderelevation!,
 smoothnesselevation!,
 knotinsertion,
 orderelevation,
-smoothnesselevation
+smoothnesselevation,
+# T-splines
+TSplineMesh,
+TSplineCell,
+TSplineInterpolation,
+generate_tspline_patch,
+greville_points,
+tjunction_extensions,
+is_analysis_suitable,
+is_linearly_independent
 

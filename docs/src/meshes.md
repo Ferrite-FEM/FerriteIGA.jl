@@ -1,6 +1,6 @@
 # Meshes
 
-Geometry starts as a `NURBSMesh`. Convert it with `BezierGrid(mesh)` before assembly. Straight boxes can also use `generate_grid` with a `BezierCell`. Refinement is on the [Splines](@ref) page.
+Geometry starts as a `NURBSMesh` (or a `TSplineMesh`, see [T-splines](@ref)). Convert it with `BezierGrid(mesh)` before assembly. Straight boxes can also use `generate_grid` with a `BezierCell`. Refinement is on the [Splines](@ref) page.
 
 ## `generate_nurbs_patch`
 

@@ -20,7 +20,7 @@ for example in readdir(EXAMPLEDIR)
     end
 end
 
-# remove any .vtu files in the generated dir (should not be deployed)
+# remove any .vtu and .pvd files in the generated dir (should not be deployed)
 cd(GENERATEDDIR) do
-    foreach(file -> endswith(file, ".vtu") && rm(file), readdir())
+    foreach(file -> (endswith(file, ".vtu") || endswith(file, ".pvd")) && rm(file), readdir())
 end

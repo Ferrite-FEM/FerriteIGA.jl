@@ -36,6 +36,9 @@ function apply_analytical_iga!(
         isnothing(Ferrite._find_field(sdh, fieldname)) && continue
         field_idx = Ferrite.find_field(sdh, fieldname)
         ip_fun = Ferrite.getfieldinterpolation(sdh, field_idx)
+        if _bernstein_ip(ip_fun) !== ip_fun
+            throw(ArgumentError("apply_analytical_iga! is not supported for T-spline grids."))
+        end
         field_dim = Ferrite.n_components(sdh, field_idx)
         celldofinds = Ferrite.dof_range(sdh, fieldname)
         set_intersection = if length(cellset) == length(sdh.cellset) == getncells(Ferrite.get_grid(dh))

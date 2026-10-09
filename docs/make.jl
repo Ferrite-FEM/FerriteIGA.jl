@@ -7,6 +7,7 @@ GENERATEDEXAMPLES = [joinpath("examples", f) for f in (
     "plate_with_hole.md",
     "structuralvibrations.md",
     "kirchhoff_plate.md",
+    "tspline_heat_equation.md",
     )]
 
 makedocs(
@@ -18,7 +19,7 @@ makedocs(
     warnonly = Documenter.except(:missing_docs),
     pages = Any[
         "Home" => "index.md",
-        "Manual" => ["splines.md", "meshes.md", "bezier_extraction.md"],
+        "Manual" => ["splines.md", "meshes.md", "bezier_extraction.md", "tsplines.md"],
         "Examples" => GENERATEDEXAMPLES,
         "API" => ["api.md", "nurbsmesh.md"],
     ]

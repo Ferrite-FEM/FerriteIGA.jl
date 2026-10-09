@@ -2,19 +2,18 @@
 function Ferrite._assemble_L2_matrix!(assembler, cellvalues::BezierCellValues, sdh::Ferrite.SubDofHandler)
     grid = Ferrite.get_grid(sdh.dh)
     grid isa BezierGrid || error("BezierCellValues L2 projection requires a BezierGrid")
-    n = getnbasefunctions(cellvalues)
-    Me = zeros(n, n)
-
     #reuse the dof buffer across cells
     bcoords = getcoordinates(grid, first(sdh.cellset))
     dofs = zeros(Int, ndofs_per_cell(sdh.dh, first(sdh.cellset)))
+    Me = zeros(0, 0)
 
     for cellid in sdh.cellset
-        fill!(Me, 0)
-
         #updates the current cell's extraction operator and transforms the Bernstein polynomials to splines
         getcoordinates!(bcoords, grid, cellid)
         reinit!(cellvalues, bcoords)
+        n = getnbasefunctions(cellvalues)
+        size(Me, 1) == n || (Me = zeros(n, n))
+        fill!(Me, 0)
         for q_point in 1:getnquadpoints(cellvalues)
             dΩ = getdetJdV(cellvalues, q_point)
             for j in 1:n
@@ -42,20 +41,21 @@ function Ferrite.assemble_proj_rhs!(
     grid isa BezierGrid || error("BezierCellValues L2 projection requires a BezierGrid")
 
     M = size(f, 2)
-    n = getnbasefunctions(cellvalues)
     nqp = getnquadpoints(cellvalues)
-    fe = zeros(n, M)
     bcoords = getcoordinates(grid, first(sdh.cellset))
     dofs = zeros(Int, ndofs_per_cell(sdh.dh, first(sdh.cellset)))
+    fe = zeros(0, M)
 
     for cellid in sdh.cellset
-        fill!(fe, 0)
         cell_vars = vars[cellid]
         length(cell_vars) == nqp || error("The number of variables per cell doesn't match the number of quadrature points")
 
         #rhs uses the given spline basis and geometry from the BezierCoords
         getcoordinates!(bcoords, grid, cellid)
         reinit!(cellvalues, bcoords)
+        n = getnbasefunctions(cellvalues)
+        size(fe, 1) == n || (fe = zeros(n, M))
+        fill!(fe, 0)
 
         for q_point in 1:nqp
             dΩ = getdetJdV(cellvalues, q_point)

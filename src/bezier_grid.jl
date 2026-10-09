@@ -63,6 +63,46 @@ function BezierGrid(mesh::NURBSMesh{pdim,sdim}) where {pdim,sdim}
 	return BezierGrid(cells, nodes, mesh.weights, Cvec)
 end
 
+"""
+    BezierGrid(mesh::TSplineMesh)
+
+Grid of the Bézier elements of a T-spline, with one `TSplineCell` per element. Cells with different 
+numbers of basis functions have different types, so the grid has mixed cell types. 
+
+The grid contains the nodesets and facetsets `"left"`, `"right"`, `"bottom"` and `"top"` for the 
+boundaries of the parametric domain. The nodesets contain the control points whose basis function is 
+non-zero on the boundary.
+"""
+function BezierGrid(mesh::TSplineMesh{sdim,T}) where {sdim,T}
+	p = mesh.order
+	cells_any = [TSplineCell{RefQuadrilateral,p}(Tuple(ien)) for ien in mesh.IEN]
+	CT = Union{unique(typeof.(cells_any))...}
+	cells = convert(Vector{CT}, cells_any)
+	nodes = [Node(x) for x in mesh.control_points]
+	beos = compute_bezier_extraction_operators(mesh)
+
+	umin, umax = mesh.knots[1][1], mesh.knots[1][end]
+	vmin, vmax = mesh.knots[2][1], mesh.knots[2][end]
+
+	nodesets = Dict{String,OrderedSet{Int}}(name => OrderedSet{Int}() for name in ("left", "right", "bottom", "top"))
+	for (A, (Ξ, Π)) in enumerate(mesh.local_knots)
+		Ξ[1] == Ξ[p+1] == umin && push!(nodesets["left"], A)
+		Ξ[2] == Ξ[p+2] == umax && push!(nodesets["right"], A)
+		Π[1] == Π[p+1] == vmin && push!(nodesets["bottom"], A)
+		Π[2] == Π[p+2] == vmax && push!(nodesets["top"], A)
+	end
+
+	facetsets = Dict{String,OrderedSet{FacetIndex}}(name => OrderedSet{FacetIndex}() for name in ("left", "right", "bottom", "top"))
+	for (e, (ξa, ξb, ηa, ηb)) in enumerate(mesh.elements)
+		ηa == vmin && push!(facetsets["bottom"], FacetIndex(e, 1))
+		ξb == umax && push!(facetsets["right"],  FacetIndex(e, 2))
+		ηb == vmax && push!(facetsets["top"],    FacetIndex(e, 3))
+		ξa == umin && push!(facetsets["left"],   FacetIndex(e, 4))
+	end
+
+	return BezierGrid(cells, nodes, mesh.weights, beos; nodesets, facetsets)
+end
+
 function BezierGrid(grid::Ferrite.Grid{dim,C,T}) where {dim,C,T}
 	weights = ones(T, getnnodes(grid))
 	extraction_operator = Optional{BezierExtractionOperator{T}}[nothing for _ in 1:getncells(grid)]
@@ -115,7 +155,19 @@ end
 #Note: This is needed in order to get some stuff to work nicely in Ferrite.
 Ferrite.get_coordinate_type(::BezierGrid{dim,C,T}) where {dim,C,T} = Vec{dim,T} 
 
+"""
+	_nbezierpoints(grid::BezierGrid, cellid)
+
+Number of Bézier control points of the cell. This equals the number of nodes (spline control points), 
+except for T-spline cells.
+"""
+function _nbezierpoints(grid::BezierGrid, ic::Int)
+	C = grid.beo[ic]
+	return C === nothing ? Ferrite.nnodes_per_cell(grid, ic) : length(first(C.C))
+end
+
 function Ferrite.getcoordinates!(bc::BezierCoords{dim,T}, grid::BezierGrid, ic::Int) where {dim,T}
+	resize_bezier_coord!(bc, _nbezierpoints(grid, ic), Ferrite.nnodes_per_cell(grid, ic))
 	get_bezier_coordinates!(bc.xb, bc.wb, bc.x, bc.w, grid, ic)
 	bc.beo = grid.beo[ic]
 	return bc
@@ -124,9 +176,10 @@ end
 function Ferrite.getcoordinates(grid::BezierGrid{dim,C,T}, ic::Int) where {dim,C,T}
 
 	n = Ferrite.nnodes_per_cell(grid, ic)
+	nb = _nbezierpoints(grid, ic)
 	w = zeros(T, n)
-	wb = zeros(T, n)
-	xb = zeros(Vec{dim,T}, n)
+	wb = zeros(T, nb)
+	xb = zeros(Vec{dim,T}, nb)
 	x = zeros(Vec{dim,T}, n)
 	
 	bc = BezierCoords(xb, wb, x, w, grid.beo[ic])
@@ -142,6 +195,7 @@ In-place fill of NURBS and Bézier data for cell `cellid`.
 
 - `x`, `w` are the NURBS control points and weights respectively.
 - `xb`, `wb` are the above transformed in Bernstein basis from the Bezier extraction operator.
+  These have length `(order+1)^dim`, which differs from the length of `x` and `w` for T-spline cells.
 
 If the cell has no extraction operator, `xb`/`wb` is made as a copy of `x`/`w`.
 """
@@ -151,8 +205,6 @@ function get_bezier_coordinates!(xb::AbstractVector{Vec{dim,T}},
 								 w::AbstractVector{T}, 
 								 grid::BezierGrid, 
 								 ic::Int) where {dim,T}
-    n = length(xb)
-	
 	Ferrite.getcoordinates!(x, grid.grid, ic)
 	get_nurbs_weights!(w, grid, ic)
 
@@ -177,10 +229,11 @@ See [`get_bezier_coordinates!`](@ref).
 function get_bezier_coordinates(grid::BezierGrid{dim,C,T}, ic::Int) where {dim,C,T}
 
 	n = Ferrite.nnodes_per_cell(grid, ic)
+	nb = _nbezierpoints(grid, ic)
 	w = zeros(T, n)
 	x = zeros(Vec{dim,T}, n)
-	wb = zeros(T, n)
-	xb = zeros(Vec{dim,T}, n)
+	wb = zeros(T, nb)
+	xb = zeros(Vec{dim,T}, nb)
 	
 	get_bezier_coordinates!(xb, wb, x, w, grid, ic)
 	return xb, wb, x, w
