@@ -173,10 +173,51 @@ end
         @test sum(f -> mesh.elements[f[1]][2] - mesh.elements[f[1]][1], facets) ≈ 2.0
     end
 
+    #Facet integration on the boundary of the graded mesh
+    fv = BezierFacetValues(FacetQuadratureRule{RefQuadrilateral}(4), IGAInterpolation{RefQuadrilateral,3}())
+    for (set, len) in (("bottom", 2.0), ("right", 1.0), ("top", 2.0), ("left", 1.0))
+        L = 0.0
+        for (cellid, facetid) in getfacetset(grid, set)
+            reinit!(fv, getcoordinates(grid, cellid), facetid)
+            for qp in 1:getnquadpoints(fv)
+                L += getdetJdV(fv, qp)
+                @test sum(i -> shape_value(fv, qp, i), 1:getnbasefunctions(fv)) ≈ 1.0
+            end
+        end
+        @test L ≈ len
+    end
+
     #Even degree
     mesh2 = generate_tspline_patch(:graded_rectangle, [3, 6], [2, 4], 2)
+    @test is_analysis_suitable(mesh2)
     @test is_linearly_independent(mesh2)
-    @test_throws ArgumentError is_analysis_suitable(mesh2)
+    @test all(ien -> length(ien) == 9, mesh2.IEN)
+end
+
+@testset "T-splines: analysis-suitability for odd and even degrees" begin
+    configurations = [
+        ([(4.5, 4.0, 5.0)], [(4.5, 4.0, 5.0)]),                                 #A face split into four
+        ([(3.5, 3.0, 5.0), (4.5, 3.0, 5.0)], [(3.5, 3.0, 5.0), (4.5, 3.0, 5.0)]), #A refined 2×2 block
+        ([(2.5, 2.0, 5.0)], [(5.5, 3.0, 6.0)]),                                 #Perpendicular T-junctions close to each other
+        ([(2.5, 1.0, 4.0)], [(6.5, 4.0, 7.0)]),                                 #Perpendicular T-junctions far apart
+        ([(2.5, 2.0, 5.0)], [(4.5, 3.0, 6.0)]),
+        ([(2.5, 2.0, 4.0)], [(4.5, 5.0, 7.0)]),
+        ([(4.5, 2.0, 6.0), (5.5, 3.0, 5.0)], NTuple{3,Float64}[]),              #Only vertical T-junctions
+    ]
+    expected = Dict(3 => [false, false, false, true, false, true, true], 2 => [false, false, false, true, false, true, true])
+    for p in (2, 3)
+        for (k, (vsegs, hsegs)) in enumerate(configurations)
+            mesh = _tmesh_with_segments(vsegs, hsegs; p)
+            AS = is_analysis_suitable(mesh)
+            @test AS == expected[p][k]
+            #Analysis-suitable T-splines are linearly independent and locally linearly independent, 
+            #i.e. there are (p+1)^2 functions on each element. (For these meshes, the reverse also holds.)
+            @test AS == all(ien -> length(ien) == (p+1)^2, mesh.IEN)
+            AS && @test is_linearly_independent(mesh)
+        end
+    end
+    #Analysis-suitable meshes for degree p are analysis-suitable for lower degrees (same T-mesh for p = 2 and 3)
+    @test all(k -> !expected[3][k] || expected[2][k], eachindex(configurations))
 end
 
 @testset "T-splines: non analysis-suitable mesh" begin
@@ -185,30 +226,26 @@ end
     @test !is_analysis_suitable(mesh)
     @test is_linearly_independent(mesh)
     @test sort(unique(length.(mesh.IEN))) == [16, 17]
-    @test _tmesh_with_segments([(2.5, 1.0, 4.0)], [(6.5, 4.0, 7.0)]) |> is_analysis_suitable
 
-    #The rational basis is a partition of unity also for variable number of functions per cell
+    #The grid can be created, with one SubDofHandler per cell type
     grid = BezierGrid(mesh)
     @test !isconcretetype(eltype(grid.cells))
-    cv = BezierCellValues(QuadratureRule{RefQuadrilateral}(4), IGAInterpolation{RefQuadrilateral,3}())
-    cellids = [findfirst(c -> Ferrite.nnodes(c) == N, grid.cells) for N in (16, 17, 16, 17)]
-    for cellid in cellids
-        coords = getcoordinates(grid, cellid)
-        reinit!(cv, coords)
-        @test getnbasefunctions(cv) == Ferrite.nnodes(grid.cells[cellid])
-        (ξa, ξb, ηa, ηb) = mesh.elements[cellid]
-        for qp in 1:getnquadpoints(cv)
-            @test sum(i -> shape_value(cv, qp, i), 1:getnbasefunctions(cv)) ≈ 1.0
-            @test norm(sum(i -> shape_gradient(cv, qp, i), 1:getnbasefunctions(cv))) < 1e-12
-            x = spatial_coordinate(cv, qp, coords)
-            @test ξa <= x[1] <= ξb && ηa <= x[2] <= ηb
-        end
+    dh = DofHandler(grid)
+    add!(dh, :u, IGAInterpolation{RefQuadrilateral,3}()^2)
+    close!(dh)
+    @test length(dh.subdofhandlers) == 2
+    @test sum(sdh -> count(_ -> true, CellIterator(sdh)), dh.subdofhandlers) == getncells(grid)
+    for sdh in dh.subdofhandlers, cc in CellIterator(sdh)
+        @test length(celldofs(cc)) == 2 * Ferrite.nnodes(grid.cells[cellid(cc)])
     end
 
-    #Solve on the mixed grid, constants are reproduced
-    err, dh, _ = _solve_tspline_poisson(grid, 3, x -> 2.0, x -> 0.0)
-    @test err < 1e-10
-    @test length(dh.subdofhandlers) == 2
+    #BezierCellValues only support square extraction operators, i.e. cells with (p+1)^2 functions
+    cv = BezierCellValues(QuadratureRule{RefQuadrilateral}(4), IGAInterpolation{RefQuadrilateral,3}())
+    coords16 = getcoordinates(grid, findfirst(c -> Ferrite.nnodes(c) == 16, grid.cells))
+    reinit!(cv, coords16)
+    @test all(qp -> sum(i -> shape_value(cv, qp, i), 1:16) ≈ 1.0, 1:getnquadpoints(cv))
+    coords17 = getcoordinates(grid, findfirst(c -> Ferrite.nnodes(c) == 17, grid.cells))
+    @test_throws ArgumentError reinit!(cv, coords17)
 end
 
 @testset "T-splines: invalid T-meshes" begin
@@ -241,7 +278,9 @@ end
 end
 
 @testset "T-splines: caches, iterators and VTK export" begin
-    mesh = _tmesh_with_segments([(2.5, 2.0, 5.0)], [(5.5, 3.0, 6.0)])
+    #Analysis-suitable mesh with both horizontal and vertical T-junctions
+    mesh = _tmesh_with_segments([(2.5, 1.0, 4.0)], [(6.5, 4.0, 7.0)])
+    @test is_analysis_suitable(mesh)
     grid = BezierGrid(mesh)
     ip = IGAInterpolation{RefQuadrilateral,3}()
     dh = DofHandler(grid)
@@ -257,11 +296,9 @@ end
         @test celldofs(cc) == celldofs(dh, cellid)
         @test length(celldofs(cc)) == 2N
     end
-    #Mixed cell types: iterate over each SubDofHandler
-    @test sum(sdh -> count(_ -> true, CellIterator(sdh)), dh.subdofhandlers) == getncells(grid)
-    for sdh in dh.subdofhandlers, cc in CellIterator(sdh)
-        @test length(celldofs(cc)) == 2 * Ferrite.nnodes(grid.cells[cellid(cc)])
-    end
+    #A single cell type, so Ferrite's CellIterator works as usual
+    @test isconcretetype(eltype(grid.cells))
+    @test count(_ -> true, CellIterator(dh)) == getncells(grid)
 
     #Vector valued field: interpolate the identity map, x = Σ Rᴬ xᴬ
     a = zeros(ndofs(dh))
@@ -272,7 +309,7 @@ end
         end
     end
     cv = BezierCellValues(QuadratureRule{RefQuadrilateral}(4), ip^2)
-    for cellid in (1, findfirst(c -> Ferrite.nnodes(c) == 17, grid.cells))
+    for cellid in 1:getncells(grid)
         coords = getcoordinates(grid, cellid)
         reinit!(cv, coords)
         ae = a[celldofs(dh, cellid)]

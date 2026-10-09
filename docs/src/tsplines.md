@@ -46,17 +46,19 @@ The Bézier elements are bounded by all knot lines of all basis functions (the *
 
 General T-splines can have linearly dependent basis functions, and they need not be a partition of unity or reproduce polynomials. *Analysis-suitable* (AS) T-splines are a mildly restricted class without these problems (Li, Zheng, Sederberg, Hughes and Scott, 2012; [Li and Scott, 2014](https://arxiv.org/abs/1211.5669)).
 
-Each T-junction has an *extension* that continues its missing edge:
+Each T-junction has an *extension* that continues its missing edge and spans `p` bays in total ([Beirão da Veiga, Buffa, Sangalli and Vázquez, 2013](https://doi.org/10.1142/S0218202513500231)):
 
-- The **face extension** extends `(p+1)/2` bays into the face where the edge is missing.
-- The **edge extension** extends `(p-1)/2` bays in the opposite direction.
+- The **face extension** extends `⌊(p+1)/2⌋` bays into the face where the edge is missing.
+- The **edge extension** extends `⌈(p-1)/2⌉` bays in the opposite direction.
+
+That is, `(p+1)/2` and `(p-1)/2` bays for odd degrees, and `p/2` bays in both directions for even degrees.
 
 A T-junction is horizontal if its missing edge is horizontal (`⊢`, `⊣`), otherwise vertical (`⊥`, `⊤`). A T-mesh is **analysis-suitable** if no horizontal T-junction extension intersects a vertical T-junction extension. Use [`is_analysis_suitable`](@ref) to check this, and [`tjunction_extensions`](@ref) to inspect the extensions.
 
 For an analysis-suitable T-spline:
 - the basis functions are linearly independent for any choice of knot values;
 - they form a partition of unity and reproduce all polynomials of degree `p`, so a mesh with control points at the Greville points ([`greville_points`](@ref)) represents an affine geometry exactly, and patch tests are passed;
-- they are locally linearly independent: exactly `(p+1)^2` basis functions are non-zero on each Bézier element;
+- they are locally linearly independent: exactly `(p+1)^2` basis functions are non-zero on each Bézier element. This follows from the equivalence of analysis-suitable and *dual-compatible* T-meshes (Beirão da Veiga et al., 2013);
 - the approximation is optimal, `O(h^(p+1))` in the L2 norm, as for NURBS;
 - nested T-meshes give nested spaces, which is the basis for local refinement.
 
@@ -66,18 +68,28 @@ For an analysis-suitable T-spline:
 - **Meshes where all T-junctions have the same orientation.** If, for example, every horizontal line spans the whole domain and only vertical lines end in T-junctions, there are no horizontal extensions, so the mesh is always analysis-suitable. This is the case for layered meshes that get finer towards one side, such as `generate_tspline_patch(:graded_rectangle, ...)`, for any number of elements in the layers.
 - **Locally refined meshes where perpendicular T-junctions are far enough apart.** When a region is refined in both directions, the new lines in one direction can be extended beyond the refined region, so that the vertical extensions end before they reach the horizontal ones. Use `is_analysis_suitable` to check the result.
 
-A typical mesh that is **not** analysis-suitable has a horizontal and a vertical T-junction close to each other, e.g. a single face split into four, or a refined block whose corner has T-junctions in both directions. The extensions of these T-junctions cross near the corner. Such meshes can still be used, but the guarantees above are lost. Elements may then have more than `(p+1)^2` basis functions (e.g. 17 for cubics), and the basis is generally not a partition of unity, although the rational basis computed by `BezierCellValues` always is. Use [`is_linearly_independent`](@ref) to check such a basis numerically.
+A typical mesh that is **not** analysis-suitable has a horizontal and a vertical T-junction close to each other, e.g. a single face split into four, or a refined block whose corner has T-junctions in both directions. The extensions of these T-junctions cross near the corner. For such meshes, the guarantees above are lost. Elements may have more or fewer than `(p+1)^2` basis functions (e.g. 17 or 15 for cubics), the basis is generally not a partition of unity, and linear independence depends on the knot values ([`is_linearly_independent`](@ref) checks it numerically for given knots). A `BezierGrid` can still be created, but `BezierCellValues` only support square extraction operators, and throw an error on elements that do not have exactly `(p+1)^2` basis functions.
 
-For even degrees, the topological check is not implemented. Use [`is_linearly_independent`](@ref) instead.
+The index vectors of the basis functions are computed by marching along the lines through the anchors (Bazilevs et al., 2010). For even degrees, Beirão da Veiga et al. (2013) instead use the lines spanning the whole anchor face; the two definitions coincide for analysis-suitable T-meshes.
 
 ## Grids with T-spline cells
 
-`BezierGrid(mesh::TSplineMesh)` creates one [`TSplineCell`](@ref) per Bézier element. Its nodes are the control points whose basis functions are non-zero on the element. If the number of these differs between elements (only for meshes that are not analysis-suitable), the grid has several cell types. In that case:
+`BezierGrid(mesh::TSplineMesh)` creates one [`TSplineCell`](@ref) per Bézier element. Its nodes are the control points whose basis functions are non-zero on the element. For analysis-suitable meshes, all cells have `(p+1)^2` nodes and the same type. If the number of nodes differs between elements (only for meshes that are not analysis-suitable), the grid has several cell types. In that case:
 
 - `add!(dh, :u, ip)` creates one `SubDofHandler` per cell type and uses a [`TSplineInterpolation`](@ref) with the right number of functions for each.
 - Use `ndofs_per_cell(dh, cellid)` or `getnbasefunctions(cv)` (after `reinit!`) instead of `ndofs_per_cell(dh)`. Use `CellIterator(sdh)` for each SubDofHandler instead of `CellIterator(dh)`.
 
-The grid contains the facetsets and nodesets `"left"`, `"right"`, `"bottom"` and `"top"` of the parametric domain. A `Dirichlet` condition on a facetset prescribes the control points whose basis functions are non-zero on the facets, with the value `f` evaluated at the control points.
+The grid contains the facetsets and nodesets `"left"`, `"right"`, `"bottom"` and `"top"` of the parametric domain. Facet integrals (e.g. Neumann conditions) work with `BezierFacetValues` on these facetsets, as for NURBS.
+
+## Boundary conditions
+
+The degrees of freedom of a spline are the coefficients of the basis functions, not nodal values. The following constraints are available for `BezierGrid`s (NURBS and T-splines):
+
+- `Dirichlet` on a facetset prescribes the control points whose basis functions are non-zero on the facets, with the value of `f` evaluated at the control points. This is exact for constant (and, with control points at the Greville points, linear) boundary data, but otherwise only an approximation. It supports time dependent data via `update!`.
+- [`ProjectedIGADirichlet`](@ref) computes the boundary values by an L2 projection onto the spline functions on the boundary, which is exact whenever the data can be represented by the spline, and generally more accurate. The projection is computed once, when it is added to the `ConstraintHandler`, so the data can not depend on time.
+- [`PeriodicIGADirichlet`](@ref) ties the control points on two identical sides of the domain (up to a translation) with affine constraints.
+
+Ferrite's `ProjectedDirichlet` is not supported for spline fields.
 
 The facets of a `TSplineCell` can not be computed from its nodes, so functions that rely on the grid topology, such as `addfacetset!` and `ExclusiveTopology`, do not work; use the predefined sets instead. `L2Projector` and `apply_analytical_iga!` are not supported for T-spline grids. Only parametric dimension 2 is supported.
 

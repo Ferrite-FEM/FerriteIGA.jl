@@ -305,22 +305,28 @@ end
 """
 	tjunction_extensions(mesh::TSplineMesh)
 
-Return the extensions of all T-junctions of the T-mesh (for odd degrees), as two vectors of index space
-segments: horizontal extensions `(i1, i4, j)` and vertical extensions `(i, j1, j4)`.
-The face extension of a T-junction extends `(p+1)/2` bays into the face where the edge is missing,
-and the edge extension extends `(p-1)/2` bays in the opposite direction.
+Return the extensions of all T-junctions of the T-mesh, as two vectors of index space
+segments: horizontal extensions `(i1, i2, j)` and vertical extensions `(i, j1, j2)`.
+
+Following Beirão da Veiga, Buffa, Sangalli and Vázquez (2013), the extension of a T-junction spans `p` bays:
+the *face extension* extends `⌊(p+1)/2⌋` bays into the face where the edge is missing, and the *edge extension* 
+extends `⌈(p-1)/2⌉` bays in the opposite direction. That is, `(p+1)/2` and `(p-1)/2` bays for odd degrees, 
+and `p/2` bays in both directions for even degrees.
 """
 function tjunction_extensions(mesh::TSplineMesh)
 	p = mesh.order
-	isodd(p) || throw(ArgumentError("T-junction extensions are only defined for odd degrees in this implementation."))
 	(; hedges, vedges) = mesh
 	n1, n2 = length.(mesh.knots)
-	kf = (p+1)÷2
-	ke = (p-1)÷2
+	kf = cld(p, 2) # = ⌊(p+1)/2⌋
+	ke = p ÷ 2     # = ⌈(p-1)/2⌉
 	hext = NTuple{3,Int}[]
 	vext = NTuple{3,Int}[]
-	for A in mesh.anchors
-		i, j = A .÷ 2
+	#The T-junctions are vertices of the T-mesh (for even degrees, the anchors are faces, not vertices)
+	vertices = Set{NTuple{2,Int}}()
+	for (i0, i1, j0, j1) in mesh.faces
+		push!(vertices, (i0,j0), (i1,j0), (i1,j1), (i0,j1))
+	end
+	for (i, j) in vertices
 		(1 < i < n1 && 1 < j < n2) || continue
 		left  = (i-1,j) in hedges
 		right = (i,j)   in hedges
@@ -347,13 +353,12 @@ end
 
 Check if the T-mesh is analysis-suitable, i.e. if no horizontal T-junction extension intersects
 a vertical T-junction extension (see [`tjunction_extensions`](@ref)).
-For analysis-suitable T-splines, the basis functions are linearly independent, form a partition of unity,
-reproduce polynomials of degree `p` and have optimal approximation properties.
-
-Only implemented for odd degrees. For even degrees, use [`is_linearly_independent`](@ref).
+For analysis-suitable T-splines of any degree, the basis functions are linearly independent, form a partition of unity,
+reproduce polynomials of degree `p` and have optimal approximation properties. Analysis-suitable T-meshes are exactly the
+dual-compatible T-meshes (Beirão da Veiga, Buffa, Sangalli and Vázquez, 2013), so the basis functions are also locally 
+linearly independent: exactly `(p+1)^2` basis functions are non-zero on each Bézier element.
 """
 function is_analysis_suitable(mesh::TSplineMesh)
-	isodd(mesh.order) || throw(ArgumentError("is_analysis_suitable is only implemented for odd degrees. Use is_linearly_independent(mesh) to check the basis numerically."))
 	hext, vext = tjunction_extensions(mesh)
 	for (i1, i4, j) in hext, (i, j1, j4) in vext
 		if i1 <= i <= i4 && j1 <= j <= j4
@@ -368,6 +373,8 @@ end
 
 Numerically check if the T-spline basis functions are linearly independent, by computing the rank of the matrix of
 Bézier coefficients of all basis functions. A dense matrix is used, so this is only intended for meshes of moderate size.
+
+Analysis-suitable T-meshes are always linearly independent (for any knot values), but the opposite does not hold.
 """
 function is_linearly_independent(mesh::TSplineMesh{sdim,T}; rtol = sqrt(eps(T))) where {sdim,T}
 	beos = compute_bezier_extraction_operators(mesh)

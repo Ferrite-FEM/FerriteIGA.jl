@@ -40,5 +40,8 @@ generate_tspline_patch,
 greville_points,
 tjunction_extensions,
 is_analysis_suitable,
-is_linearly_independent
+is_linearly_independent,
+# Constraints
+ProjectedIGADirichlet,
+PeriodicIGADirichlet
 

@@ -20,13 +20,12 @@ const _BezierValuesInterpolation = Union{IGAInterpolation, TSplineInterpolation,
 Shape values on an IGA cell. Call `reinit!(cv, coords)` first. Then `shape_value` and
 `shape_gradient` return NURBS values.
 
-The number of basis functions, `getnbasefunctions(cv)`, is given by the extraction operator of the current cell.
-For T-spline grids, it therefore changes between cells.
+The extraction operator of each cell must be square, i.e. the number of spline functions on the cell must equal the number 
+of Bernstein functions. For T-splines, this holds for analysis-suitable T-meshes.
 """
 mutable struct BezierCellValues{FV, GM, QR, T, detJ} <: Ferrite.AbstractCellValues
     const bezier_values::FV # FunctionValues
-    nurbs_values::FV        # FunctionValues, resized to the number of spline functions of the current cell
-    const nurbs_values_cache::Dict{Int,FV}
+    const nurbs_values::FV  # FunctionValues
     const geo_mapping::GM   # GeometryMapping
     const qr::QR            # QuadratureRule
     const detJdV::detJ      # AbstractVector{<:Number} or Nothing
@@ -41,8 +40,7 @@ Shape values on an IGA face. Call `reinit!(fv, coords, faceid)` first.
 """
 mutable struct BezierFacetValues{FV, GM, FQR, dim, T, V_FV<:AbstractVector{FV}, V_GM<:AbstractVector{GM}} <: Ferrite.AbstractFacetValues
     const bezier_values::V_FV # FunctionValues
-    nurbs_values::V_FV        # FunctionValues, resized to the number of spline functions of the current cell
-    const nurbs_values_cache::Dict{Int,V_FV}
+    const nurbs_values::V_FV  # FunctionValues
     const geo_mapping::V_GM   # GeometryMapping
     const fqr::FQR            # QuadratureRule
     const detJdV::Vector{T}
@@ -78,11 +76,9 @@ function BezierCellValues(::Type{T}, qr::QuadratureRule, ip_fun::Interpolation, 
     undef_beo = BezierExtractionOperator(Vector{SparseArrays.SparseVector{T,Int}}(undef,0))
     undef_w   = NaN .* zeros(Float64, Ferrite.getngeobasefunctions(geo_mapping))
 
-    nurbs_values = deepcopy(fun_values)
     return BezierCellValues(
         fun_values, 
-        nurbs_values,
-        Dict(size(nurbs_values.Nξ, 1) => nurbs_values),
+        deepcopy(fun_values), 
         geo_mapping, qr, detJdV, undef_beo, undef_w)
 end
 
@@ -107,11 +103,9 @@ function BezierFacetValues(::Type{T}, fqr::FacetQuadratureRule, ip_fun::Interpol
     normals = fill(zero(Vec{sdim, T}) * T(NaN), max_nquadpoints)
     undef_beo = BezierExtractionOperator(Vector{SparseArrays.SparseVector{T,Int}}(undef,0))
     undef_w   = NaN .* zeros(Float64, Ferrite.getngeobasefunctions(first(geo_mapping)))
-    nurbs_values = deepcopy(fun_values)
     return BezierFacetValues(
         fun_values, 
-        nurbs_values,
-        Dict(size(first(nurbs_values).Nξ, 1) => nurbs_values),
+        deepcopy(fun_values), 
         geo_mapping, fqr, detJdV, normals, undef_beo, undef_w, -1)
 end
 
@@ -192,47 +186,29 @@ Prefer `reinit!(cv, getcoordinates(grid, cellid))`, which sets the operator
 from `BezierCoords` automatically. This method is for manual assembly loops.
 """
 function set_bezier_operator!(bcv::BezierCellAndFacetValues, beo::BezierExtractionOperator{T}) where T 
+    _check_extraction_operator(bcv, beo)
     bcv.current_beo=beo
-    _update_nurbs_values!(bcv, length(beo.C))
 end
 
 function set_bezier_operator!(bcv::BezierCellAndFacetValues, beo::BezierExtractionOperator{T}, w::Vector{T}) where T 
-    resize!(bcv.current_w, length(w))
+    _check_extraction_operator(bcv, beo)
     bcv.current_w   .= w
     bcv.current_beo=beo
-    _update_nurbs_values!(bcv, length(beo.C))
 end
 
-#Make sure that the spline function values have one row per spline function (times the field dimension).
-#The FunctionValues are cached for each size, since the number of functions can vary between T-spline cells.
-function _update_nurbs_values!(cv::BezierCellValues, nfuncs::Int)
-    nrows = nfuncs * _vdim(cv.bezier_values)
-    if size(cv.nurbs_values.Nξ, 1) != nrows
-        cv.nurbs_values = get!(() -> _resize_function_values(cv.bezier_values, nrows), cv.nurbs_values_cache, nrows)
+_bezier_function_values(cv::BezierCellValues) = cv.bezier_values
+_bezier_function_values(fv::BezierFacetValues) = first(fv.bezier_values)
+
+#The extraction operator must be square, with one row (spline function) per Bernstein function.
+function _check_extraction_operator(bcv::BezierCellAndFacetValues, beo::BezierExtractionOperator)
+    bezier_values = _bezier_function_values(bcv)
+    nbernstein = size(bezier_values.Nξ, 1) ÷ length(first(bezier_values.Nξ))
+    if length(beo.C) != nbernstein || any(row -> length(row) != nbernstein, beo.C)
+        throw(ArgumentError("The Bézier extraction operator has size $(length(beo.C))×$(length(first(beo.C))), but " *
+            "$nbernstein×$nbernstein is required (one spline function per Bernstein function). " *
+            "For T-splines, this happens on elements of T-meshes which are not analysis-suitable, which are not supported."))
     end
-    return cv
-end
-
-function _update_nurbs_values!(fv::BezierFacetValues, nfuncs::Int)
-    nrows = nfuncs * _vdim(first(fv.bezier_values))
-    if size(first(fv.nurbs_values).Nξ, 1) != nrows
-        fv.nurbs_values = get!(fv.nurbs_values_cache, nrows) do 
-            [_resize_function_values(bv, nrows) for bv in fv.bezier_values]
-        end
-    end
-    return fv
-end
-
-_vdim(fv::FunctionValues) = length(first(fv.Nξ))
-
-#Create FunctionValues of the same type as `fv`, but with `n` rows (base functions).
-function _resize_function_values(fv::FunctionValues, n::Int)
-    nqp = size(fv.Nξ, 2)
-    _similar(::Nothing) = nothing
-    _similar(A::AbstractMatrix) = fill!(similar(A, n, nqp), zero(eltype(A)))
-    Nξ = _similar(fv.Nξ)
-    Nx = fv.Nx === fv.Nξ ? Nξ : _similar(fv.Nx)
-    return FunctionValues(fv.ip, Nx, Nξ, _similar(fv.dNdx), _similar(fv.dNdξ), _similar(fv.d2Ndx2), _similar(fv.d2Ndξ2))
+    return nothing
 end
 
 #This function can be called when we know that the weights are all equal to one.

@@ -45,6 +45,17 @@ IGACellCache
 IGAFaceCache
 ```
 
+## Constraints
+
+Boundary conditions for spline fields on a [`BezierGrid`](@ref). See also the [T-splines](@ref) page.
+
+```@docs
+ProjectedIGADirichlet
+PeriodicIGADirichlet
+Ferrite.add!(::ConstraintHandler{<:DofHandler{<:Any, <:BezierGrid}}, ::ProjectedIGADirichlet)
+Ferrite.add!(::ConstraintHandler{<:DofHandler{<:Any, <:BezierGrid}}, ::PeriodicIGADirichlet)
+```
+
 ## I/O
 
 ```@docs
