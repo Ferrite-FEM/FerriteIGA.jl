@@ -20,6 +20,11 @@ function transform_basis!(
     @assert size(Nout, 1) == length(C.C) * stride
     @assert w === nothing || length(w) == length(C.C)
 
+    #Vectorized interpolations (ip^vdim): transform the scalar basis once instead of every vector entry
+    if stride > 1 && _is_vectorized_entry(T, stride)
+        return _transform_vectorized_basis!(C, Nout, Nin, w, stride)
+    end
+
     @inbounds for col in axes(Nout, 2)
         for i in eachindex(C.C)
             Ci = C.C[i]
@@ -36,6 +41,43 @@ function transform_basis!(
                     s += nzval[k] * Nin[ii, col]
                 end
                 Nout[oi, col] = wi * s
+            end
+        end
+    end
+    return nothing
+end
+
+# Vectorized interpolation `ip^vdim`: the basis function `(j-1)*vdim + d` is `e_d Nⱼ` (values), `e_d ⊗ ∇Nⱼ`
+# (gradients) or `e_d ⊗ ∇∇Nⱼ` (hessians). The scalar part of basis function j is component/row 1 of entry
+# `(j-1)*vdim + 1`. These are only used when the entry type matches the stride (vdim == spatial dimension).
+_is_vectorized_entry(::Type{<:Vec{dim}}, stride) where {dim} = dim == stride
+_is_vectorized_entry(::Type{<:Tensor{2,dim}}, stride) where {dim} = dim == stride
+_is_vectorized_entry(::Type{<:Tensor{3,dim}}, stride) where {dim} = dim == stride
+_is_vectorized_entry(::Type, stride) = false
+
+@inline _scalar_part(v::Vec) = v[1]
+@inline _scalar_part(t::Tensor{2,dim}) where {dim} = Vec{dim}(k -> t[1, k])
+@inline _scalar_part(t::Tensor{3,dim}) where {dim} = Tensor{2,dim}((k, l) -> t[1, k, l])
+
+@inline _vectorized_entry(::Type{<:Vec{dim}}, s::Number, d::Int) where {dim} = Vec{dim}(k -> k == d ? s : zero(s))
+@inline _vectorized_entry(::Type{<:Tensor{2,dim}}, g::Vec{dim,T}, d::Int) where {dim,T} = Tensor{2,dim}((k, l) -> k == d ? g[l] : zero(T))
+@inline _vectorized_entry(::Type{<:Tensor{3,dim}}, h::Tensor{2,dim,T}, d::Int) where {dim,T} = Tensor{3,dim}((k, l, m) -> k == d ? h[l, m] : zero(T))
+
+function _transform_vectorized_basis!(C::BezierExtractionOperator, Nout::AbstractMatrix{T}, Nin::AbstractMatrix{T}, w, stride::Int) where {T}
+    @inbounds for col in axes(Nout, 2)
+        for i in eachindex(C.C)
+            Ci = C.C[i]
+            nzind = Ci.nzind
+            nzval = Ci.nzval
+            s = zero(_scalar_part(Nin[1, col]))
+            for k in eachindex(nzind)
+                s += nzval[k] * _scalar_part(Nin[(nzind[k] - 1) * stride + 1, col])
+            end
+            if w !== nothing
+                s *= w[i]
+            end
+            for d in 1:stride
+                Nout[(i - 1) * stride + d, col] = _vectorized_entry(T, s, d)
             end
         end
     end
