@@ -248,6 +248,29 @@ end
     @test_throws ArgumentError reinit!(cv, coords17)
 end
 
+@testset "T-splines: periodic graded mesh" begin
+    for p in (2, 3)
+        open_mesh = generate_tspline_patch(:graded_rectangle, [4, 8], [2, 4], p; size = (2.0, 1.0))
+        mesh = generate_tspline_patch(:graded_rectangle, [4, 8], [2, 4], p; size = (2.0, 1.0), periodic = true)
+        @test mesh.domain == ((0.0, 2.0), (0.0, 1.0))
+        @test is_analysis_suitable(mesh)
+        @test is_linearly_independent(mesh)
+        @test all(ien -> length(ien) == (p+1)^2, mesh.IEN)
+        #The knots extend outside of the domain, but the elements do not
+        @test mesh.knots[1][1] < 0.0 && mesh.knots[1][end] > 2.0
+        @test all(e -> 0.0 <= e[1] && e[2] <= 2.0, mesh.elements)
+        @test sum(e -> (e[2]-e[1])*(e[4]-e[3]), mesh.elements) ≈ 2.0
+        @test getncells(mesh) == getncells(open_mesh) && getnnodes(mesh) == getnnodes(open_mesh)
+        for beo in compute_bezier_extraction_operators(mesh)
+            @test sum(Vector(r) for r in beo.C) ≈ ones((p+1)^2)
+        end
+        #p columns of basis functions are non-zero on the left and right sides
+        grid = BezierGrid(mesh)
+        @test length(getnodeset(grid, "left")) == length(getnodeset(grid, "right")) == p * length(getnodeset(BezierGrid(open_mesh), "left"))
+        @test length(getnodeset(grid, "bottom")) == 4 + p
+    end
+end
+
 @testset "T-splines: invalid T-meshes" begin
     knots = ([0.0, 0.0, 1.0, 2.0, 2.0], [0.0, 0.0, 1.0, 2.0, 2.0])
     faces = [(i, i+1, j, j+1) for j in 1:4 for i in 1:4]
@@ -256,6 +279,7 @@ end
     @test_throws ArgumentError TSplineMesh(knots, 3, [faces; (1, 3, 1, 2)])          #Overlap
     @test_throws ArgumentError TSplineMesh(knots, 3, [faces[3:end]; (1, 3, 1, 2)])   #Zero interval boundary line not full
     @test_throws ArgumentError TSplineMesh(knots, 3, faces; control_points = zeros(Vec{2,Float64}, 3))
+    @test_throws ArgumentError TSplineMesh(knots, 3, faces; domain = ((0.0, 1.5), (0.0, 2.0)))       #Domain cuts elements
 end
 
 @testset "T-splines: Poisson" begin

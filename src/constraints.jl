@@ -152,7 +152,9 @@ control point (with the same weight) on the image side, after translating with t
 the control points on the two sides. Otherwise an error is thrown. The matching uses a simple O(N²) search, with the
 relative tolerance `tol`.
 
-Note that only the control points on the boundary are tied, so the solution is periodic with C⁰ continuity.
+With open (interpolatory) knot vectors at the two sides, the tied solution is periodic with C⁰ continuity. 
+With periodically extended knot vectors, e.g. from `generate_tspline_patch(:graded_rectangle, ...; periodic = true)`, 
+the basis functions on the two sides are translations of each other, and the tied solution is C^(p-1) across the sides.
 Periodic conditions in several directions (e.g. a doubly periodic square) can be added one by one; constraints are
 chained such that no nested affine constraints are created. A `Dirichlet` condition added afterwards on a tied
 dof replaces that tie, so add Dirichlet conditions first.

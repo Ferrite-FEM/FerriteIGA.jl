@@ -135,3 +135,61 @@ end
     @test_throws ArgumentError add!(ConstraintHandler(dh), PeriodicIGADirichlet(:u, getfacetset(grid, "bottom"), getfacetset(grid, "top")))
     @test_throws ArgumentError add!(ConstraintHandler(dh), ProjectedDirichlet(:u, getfacetset(grid, "bottom"), x -> 0.0))
 end
+
+#Largest jumps of the value, gradient and hessian of a random periodic field across the seam x = x0/x1
+function _periodic_seam_jumps(mesh, p)
+    grid = BezierGrid(mesh)
+    ip = IGAInterpolation{RefQuadrilateral,p}()
+    dh = DofHandler(grid)
+    add!(dh, :u, ip)
+    close!(dh)
+    ch = ConstraintHandler(dh)
+    add!(ch, PeriodicIGADirichlet(:u, getfacetset(grid, "left"), getfacetset(grid, "right")))
+    close!(ch)
+    a = [sin(17.0 * i) for i in 1:ndofs(dh)]
+    apply!(a, ch)
+
+    ηs = (-0.7, 0.1, 0.6)
+    cvl = BezierCellValues(QuadratureRule{RefQuadrilateral}(ones(3), [Vec(-1.0, η) for η in ηs]), ip; update_hessians = true)
+    cvr = BezierCellValues(QuadratureRule{RefQuadrilateral}(ones(3), [Vec( 1.0, η) for η in ηs]), ip; update_hessians = true)
+    hessian(cv, qp, ae) = sum(i -> shape_hessian(cv, qp, i) * ae[i], eachindex(ae))
+    jumps = zeros(3)
+    x1 = mesh.domain[1][2]
+    for (cl, _) in getfacetset(grid, "left")
+        el = mesh.elements[cl]
+        cr = findfirst(e -> e[2] == x1 && e[3] == el[3] && e[4] == el[4], mesh.elements)
+        reinit!(cvl, getcoordinates(grid, cl))
+        reinit!(cvr, getcoordinates(grid, cr))
+        al, ar = a[celldofs(dh, cl)], a[celldofs(dh, cr)]
+        for qp in 1:3
+            jumps[1] = max(jumps[1], abs(function_value(cvl, qp, al) - function_value(cvr, qp, ar)))
+            jumps[2] = max(jumps[2], norm(function_gradient(cvl, qp, al) - function_gradient(cvr, qp, ar)))
+            jumps[3] = max(jumps[3], norm(hessian(cvl, qp, al) - hessian(cvr, qp, ar)))
+        end
+    end
+    return jumps
+end
+
+@testset "PeriodicIGADirichlet with periodic knot vectors" begin
+    #With periodic knot vectors, the tied field is C^(p-1) across the seam, while it is only C^0 with open knot vectors
+    for p in (2, 3)
+        periodic_jumps = _periodic_seam_jumps(generate_tspline_patch(:graded_rectangle, [4, 8], [2, 4], p; size = (2.0, 1.0), periodic = true), p)
+        open_jumps = _periodic_seam_jumps(generate_tspline_patch(:graded_rectangle, [4, 8], [2, 4], p; size = (2.0, 1.0)), p)
+        @test periodic_jumps[1] < 1e-10 && open_jumps[1] < 1e-10
+        @test periodic_jumps[2] < 1e-10
+        @test open_jumps[2] > 1.0
+        p == 3 && @test periodic_jumps[3] < 1e-9
+    end
+
+    #Optimal convergence for a periodic solution
+    uex(x) = cos(2π*x[1]) * sin(π*x[2])
+    f(x) = 5π^2 * uex(x)
+    errors = map((1, 2)) do k
+        grid = BezierGrid(generate_tspline_patch(:graded_rectangle, k .* [8, 16], k .* [4, 8], 3; periodic = true))
+        first(_solve_with_constraints(grid, 3, uex, f, (ch, grid) -> begin
+            add!(ch, Dirichlet(:u, union(getfacetset(grid, "bottom"), getfacetset(grid, "top")), x -> 0.0))
+            add!(ch, PeriodicIGADirichlet(:u, getfacetset(grid, "left"), getfacetset(grid, "right")))
+        end))
+    end
+    @test log2(errors[1] / errors[2]) > 3.7
+end

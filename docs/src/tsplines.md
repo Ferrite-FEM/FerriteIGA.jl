@@ -81,13 +81,23 @@ The index vectors of the basis functions are computed by marching along the line
 
 The grid contains the facetsets and nodesets `"left"`, `"right"`, `"bottom"` and `"top"` of the parametric domain. Facet integrals (e.g. Neumann conditions) work with `BezierFacetValues` on these facetsets, as for NURBS.
 
+## Periodic T-splines
+
+The T-mesh may extend outside of the parametric domain (the `domain` keyword of [`TSplineMesh`](@ref)). Bézier elements are then only created inside the domain, and only the basis functions that are non-zero in the domain are kept. This is used for periodic splines: with `generate_tspline_patch(:graded_rectangle, ...; periodic = true)`, the knot lines of each layer are extended periodically, by `p` element widths, outside of the left and right sides. The basis functions are not interpolatory at these sides, and the `p` columns of basis functions that are non-zero on the left side are translations of those on the right side. Tying them with
+
+```julia
+add!(ch, PeriodicIGADirichlet(:u, getfacetset(grid, "left"), getfacetset(grid, "right")))
+```
+
+gives a periodic solution with `C^(p-1)` continuity across the sides, whereas tying the control points of a mesh with open knot vectors only gives `C^0` continuity.
+
 ## Boundary conditions
 
 The degrees of freedom of a spline are the coefficients of the basis functions, not nodal values. The following constraints are available for `BezierGrid`s (NURBS and T-splines):
 
 - `Dirichlet` on a facetset prescribes the control points whose basis functions are non-zero on the facets, with the value of `f` evaluated at the control points. This is exact for constant (and, with control points at the Greville points, linear) boundary data, but otherwise only an approximation. It supports time dependent data via `update!`.
 - [`ProjectedIGADirichlet`](@ref) computes the boundary values by an L2 projection onto the spline functions on the boundary, which is exact whenever the data can be represented by the spline, and generally more accurate. The projection is computed once, when it is added to the `ConstraintHandler`, so the data can not depend on time.
-- [`PeriodicIGADirichlet`](@ref) ties the control points on two identical sides of the domain (up to a translation) with affine constraints.
+- [`PeriodicIGADirichlet`](@ref) ties the control points on two identical sides of the domain (up to a translation) with affine constraints. See [Periodic T-splines](@ref) for smooth periodicity.
 
 Ferrite's `ProjectedDirichlet` is not supported for spline fields.
 

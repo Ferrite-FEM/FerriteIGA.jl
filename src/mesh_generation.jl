@@ -563,7 +563,7 @@ end
 
 """
 	generate_tspline_patch(:graded_rectangle, nels_x::Vector{Int}, nels_y::Vector{Int}, order::Int; 
-		size = (1.0, 1.0), cornerpos = (0.0, 0.0), layer_heights)
+		size = (1.0, 1.0), cornerpos = (0.0, 0.0), layer_heights, periodic = false)
 
 Generate a `TSplineMesh` of a rectangle, which is divided into horizontal layers (from bottom to top). Layer `k` has 
 height `layer_heights[k]` (equal heights by default) and is divided into `nels_x[k]` equally sized columns and 
@@ -571,8 +571,15 @@ height `layer_heights[k]` (equal heights by default) and is divided into `nels_x
 
 Horizontal lines of the T-mesh always span the whole width, while vertical lines only span their layer and end in 
 T-junctions at the layer interfaces. Since all T-junctions are vertical, no horizontal T-junction extension can intersect a vertical
-extension, and the mesh is analysis-suitable for any number of elements in the layers. The boundary is open (interpolatory),
-and the knot values equal the physical coordinates, i.e. the control points are the Greville points.
+extension, and the mesh is analysis-suitable for any number of elements in the layers. The knot values equal the 
+physical coordinates, and the control points are the Greville points.
+
+By default, the boundary is open (interpolatory). With `periodic = true`, the knot vectors in the x-direction are instead
+extended periodically outside of the rectangle (each layer by `order` element widths, see the `domain` keyword of 
+[`TSplineMesh`](@ref)). The basis functions which are non-zero on the left side are then translations of the 
+basis functions on the right side, so tying their coefficients with
+`PeriodicIGADirichlet(:u, getfacetset(grid, "left"), getfacetset(grid, "right"))` gives a solution which is 
+periodic with `C^(order-1)` continuity, instead of `C^0` for an open boundary.
 """
 function generate_tspline_patch(s::Symbol, args...; kwargs...)
 	return generate_tspline_patch(Val{s}(), args...; kwargs...)
@@ -580,7 +587,7 @@ end
 
 function generate_tspline_patch(::Val{:graded_rectangle}, nels_x::AbstractVector{Int}, nels_y::AbstractVector{Int}, order::Int; 
 		size::NTuple{2,T} = (1.0, 1.0), cornerpos::NTuple{2,T} = (0.0, 0.0), 
-		layer_heights::AbstractVector{T} = fill(size[2]/length(nels_y), length(nels_y))) where T
+		layer_heights::AbstractVector{T} = fill(size[2]/length(nels_y), length(nels_y)), periodic::Bool = false) where T
 
 	nlayers = length(nels_x)
 	nlayers == length(nels_y) == length(layer_heights) || throw(ArgumentError("nels_x, nels_y and layer_heights must have the same length (the number of layers)."))
@@ -600,7 +607,12 @@ function generate_tspline_patch(::Val{:graded_rectangle}, nels_x::AbstractVector
 	findvalue(vals, v) = findfirst(x -> abs(x - v) <= tol, vals)
 
 	x0, x1 = cornerpos[1], cornerpos[1] + size[1]
-	layer_xvals = [collect(range(x0, x1, length = nels_x[k]+1)) for k in 1:nlayers]
+	#For periodic splines, the lines of each layer are extended with `order` element widths outside of the rectangle
+	nextend = periodic ? order : 0
+	layer_xvals = map(1:nlayers) do k
+		h = size[1] / nels_x[k]
+		collect(range(x0 - nextend*h, x1 + nextend*h, length = nels_x[k] + 1 + 2nextend))
+	end
 	ybounds = cornerpos[2] .+ [zero(T); cumsum(layer_heights)]
 	ybounds[end] = cornerpos[2] + size[2]
 	layer_yvals = [collect(range(ybounds[k], ybounds[k+1], length = nels_y[k]+1)) for k in 1:nlayers]
@@ -608,25 +620,28 @@ function generate_tspline_patch(::Val{:graded_rectangle}, nels_x::AbstractVector
 	xvals = unique_values(reduce(vcat, layer_xvals))
 	yvals = unique_values(reduce(vcat, layer_yvals))
 
-	#Repeat the boundary values, such that the boundary is open
+	#Repeat the boundary values, such that the boundary is open (in the x-direction only if not periodic)
 	r = order÷2 + 1
+	rx = periodic ? 1 : r
 	knots = (
-		[fill(xvals[1], r-1); xvals; fill(xvals[end], r-1)],
+		[fill(xvals[1], rx-1); xvals; fill(xvals[end], rx-1)],
 		[fill(yvals[1], r-1); yvals; fill(yvals[end], r-1)],
 	)
 	n1, n2 = length.(knots)
-	ring_x = [1:r; (n1-r+1):n1]
+	#Vertical lines which span all layers (the boundary, or the outermost lines for periodic splines)
+	ring_x = [1:rx; (n1-rx+1):n1]
 
 	faces = NTuple{4,Int}[]
 	for j in 1:(n2-1)
 		#The layer of the index row j
 		vmid = 0.5*(knots[2][j] + knots[2][j+1])
 		k = clamp(searchsortedlast(ybounds, vmid), 1, nlayers)
-		lines = sort!(unique!([ring_x; [findvalue(xvals, x) + r - 1 for x in layer_xvals[k]]]))
+		lines = sort!(unique!([ring_x; [findvalue(xvals, x) + rx - 1 for x in layer_xvals[k]]]))
 		for (i0, i1) in zip(lines[1:end-1], lines[2:end])
 			push!(faces, (i0, i1, j, j+1))
 		end
 	end
 
-	return TSplineMesh(knots, order, faces)
+	domain = ((x0, x1), (yvals[1], yvals[end]))
+	return TSplineMesh(knots, order, faces; domain)
 end

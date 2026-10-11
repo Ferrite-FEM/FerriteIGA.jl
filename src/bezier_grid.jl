@@ -70,7 +70,7 @@ Grid of the Bézier elements of a T-spline, with one `TSplineCell` per element. 
 numbers of basis functions have different types, so the grid has mixed cell types. 
 
 The grid contains the nodesets and facetsets `"left"`, `"right"`, `"bottom"` and `"top"` for the 
-boundaries of the parametric domain. The nodesets contain the control points whose basis function is 
+boundaries of the parametric domain (`mesh.domain`). The nodesets contain the control points whose basis function is 
 non-zero on the boundary.
 """
 function BezierGrid(mesh::TSplineMesh{sdim,T}) where {sdim,T}
@@ -81,15 +81,18 @@ function BezierGrid(mesh::TSplineMesh{sdim,T}) where {sdim,T}
 	nodes = [Node(x) for x in mesh.control_points]
 	beos = compute_bezier_extraction_operators(mesh)
 
-	umin, umax = mesh.knots[1][1], mesh.knots[1][end]
-	vmin, vmax = mesh.knots[2][1], mesh.knots[2][end]
+	(umin, umax), (vmin, vmax) = mesh.domain
 
+	#A basis function is non-zero on a boundary line if the line passes through the interior of its support,
+	#or if the line is at the end of the support and the knot there has multiplicity p+1 (open knot vector)
+	nonzero_at_start(K, u) = K[1] < u < K[end] || K[1] == K[p+1] == u
+	nonzero_at_end(K, u)   = K[1] < u < K[end] || K[2] == K[p+2] == u
 	nodesets = Dict{String,OrderedSet{Int}}(name => OrderedSet{Int}() for name in ("left", "right", "bottom", "top"))
 	for (A, (Ξ, Π)) in enumerate(mesh.local_knots)
-		Ξ[1] == Ξ[p+1] == umin && push!(nodesets["left"], A)
-		Ξ[2] == Ξ[p+2] == umax && push!(nodesets["right"], A)
-		Π[1] == Π[p+1] == vmin && push!(nodesets["bottom"], A)
-		Π[2] == Π[p+2] == vmax && push!(nodesets["top"], A)
+		nonzero_at_start(Ξ, umin) && push!(nodesets["left"], A)
+		nonzero_at_end(Ξ, umax)   && push!(nodesets["right"], A)
+		nonzero_at_start(Π, vmin) && push!(nodesets["bottom"], A)
+		nonzero_at_end(Π, vmax)   && push!(nodesets["top"], A)
 	end
 
 	facetsets = Dict{String,OrderedSet{FacetIndex}}(name => OrderedSet{FacetIndex}() for name in ("left", "right", "bottom", "top"))

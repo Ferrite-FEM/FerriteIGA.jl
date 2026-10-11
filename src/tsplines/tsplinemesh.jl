@@ -1,5 +1,5 @@
 """
-	TSplineMesh(knots, order, faces; control_points, weights)
+	TSplineMesh(knots, order, faces; control_points, weights, domain)
 
 A (rational) T-spline with parametric dimension 2 and polynomial degree `order` in both directions.
 
@@ -13,6 +13,12 @@ One basis function is associated with each *anchor*: the vertices of the T-mesh 
 centers of the faces for even degrees. The anchors are sorted row by row (bottom to top, left to right), and
 `control_points` and `weights` must be given in this order. If `control_points` are not given, the Greville points
 of the basis functions are used, which gives the identity map from the parametric domain (see [`greville_points`](@ref)).
+
+The parametric `domain = ((ξ0, ξ1), (η0, η1))` defaults to the range of the knots. A smaller domain can be used
+to let the T-mesh extend outside of the domain (a *frame*), e.g. with periodically extended knots, which gives
+basis functions that are not interpolatory at the boundary. The bounds of the domain must be lines of the T-mesh.
+Bézier elements are only created inside the domain, and only the basis functions which are non-zero in the domain
+are kept (and numbered).
 
 Use `BezierGrid(mesh)` to create a grid of Bézier elements with extraction operators for analysis.
 See [`is_analysis_suitable`](@ref) for which T-meshes give a well behaved basis.
@@ -29,24 +35,48 @@ struct TSplineMesh{sdim,T}
 	weights::Vector{T}
 	elements::Vector{NTuple{4,T}} #Bézier elements in the parametric domain, (ξa, ξb, ηa, ηb)
 	IEN::Vector{Vector{Int}}
+	domain::NTuple{2,NTuple{2,T}} #The parametric domain ((ξ0, ξ1), (η0, η1))
 end
 
 function TSplineMesh(knots::NTuple{2,Vector{T}}, order::Int, faces::AbstractVector{NTuple{4,Int}};
 		control_points::Union{Nothing,AbstractVector{<:Vec}} = nothing,
-		weights::Union{Nothing,AbstractVector} = nothing) where {T}
+		weights::Union{Nothing,AbstractVector} = nothing,
+		domain::Union{Nothing,NTuple{2,NTuple{2,<:Real}}} = nothing) where {T}
 
 	order >= 1 || throw(ArgumentError("The order must be at least 1."))
 	faces = collect(faces)
 	hedges, vedges, vertices = _validate_tmesh(knots, order, faces)
+	domain = domain === nothing ? ((knots[1][1], knots[1][end]), (knots[2][1], knots[2][end])) : 
+	                              (T.(domain[1]), T.(domain[2]))
 
-	anchors = _compute_anchors(order, faces, vertices)
-	local_knots = [_local_knot_vectors(knots, order, hedges, vedges, A) for A in anchors]
-	for (A, (Ξ, Π)) in zip(anchors, local_knots)
-		if Ξ[1] == Ξ[end] || Π[1] == Π[end]
-			throw(ArgumentError("The basis function anchored at index $(A./2) has a support with zero area."))
-		end
+	all_anchors = _compute_anchors(order, faces, vertices)
+	all_local_knots = [_local_knot_vectors(knots, order, hedges, vedges, A) for A in all_anchors]
+	#Basis functions with zero support (only possible outside the domain) are not considered
+	nonzero = [Ξ[1] < Ξ[end] && Π[1] < Π[end] for (Ξ, Π) in all_local_knots]
+	all_elements, all_IEN = _compute_elements_and_ien(knots, hedges, vedges, all_local_knots[nonzero])
+	nonzero_ids = findall(nonzero)
+
+	#Keep the elements inside the domain, and the basis functions which are non-zero on them
+	(ξ0, ξ1), (η0, η1) = domain
+	keep_elements = Int[]
+	for (e, (ξa, ξb, ηa, ηb)) in enumerate(all_elements)
+		inside  = ξ0 <= ξa && ξb <= ξ1 && η0 <= ηa && ηb <= η1
+		outside = ξb <= ξ0 || ξa >= ξ1 || ηb <= η0 || ηa >= η1
+		inside || outside || throw(ArgumentError("The Bézier element $((ξa, ξb, ηa, ηb)) crosses the boundary of the domain $domain. The bounds of the domain must be lines of the T-mesh."))
+		inside && push!(keep_elements, e)
 	end
-	elements, IEN = _compute_elements_and_ien(knots, hedges, vedges, local_knots)
+	isempty(keep_elements) && throw(ArgumentError("The domain $domain does not contain any elements."))
+	elements = all_elements[keep_elements]
+	kept = sort!(unique(reduce(vcat, all_IEN[keep_elements])))
+	renumber = Dict(A => i for (i, A) in enumerate(kept))
+	IEN = [[renumber[A] for A in ien] for ien in all_IEN[keep_elements]]
+	anchors = all_anchors[nonzero_ids[kept]]
+	local_knots = all_local_knots[nonzero_ids[kept]]
+	#Without a frame, all basis functions must be non-zero in the domain
+	if length(anchors) != length(all_anchors) && domain == ((knots[1][1], knots[1][end]), (knots[2][1], knots[2][end]))
+		A = first(setdiff(all_anchors, anchors))
+		throw(ArgumentError("The basis function anchored at index $(A./2) has a support with zero area."))
+	end
 
 	if control_points === nothing
 		control_points = _greville_points(order, local_knots)
@@ -57,7 +87,7 @@ function TSplineMesh(knots::NTuple{2,Vector{T}}, order::Int, faces::AbstractVect
 
 	sdim = length(first(control_points))
 	return TSplineMesh{sdim,T}(order, knots, faces, hedges, vedges, anchors, local_knots,
-		collect(Vec{sdim,T}, control_points), weights, elements, IEN)
+		collect(Vec{sdim,T}, control_points), weights, elements, IEN, domain)
 end
 
 """
