@@ -29,8 +29,9 @@ end
 
 #Solve -Δu + c u = f with Dirichlet conditions u = uex on the facetsets `dbc_sets`. Returns the L2 error.
 function _solve_tspline_poisson(grid, p, uex, f; dbc_sets = ("left", "right", "bottom", "top"), c = 0.0)
-    ip = IGAInterpolation{RefQuadrilateral,p}()
-    cv = BezierCellValues(QuadratureRule{RefQuadrilateral}(p+2), ip)
+    shape = Ferrite.getrefshape(getcells(grid, 1))
+    ip = IGAInterpolation{shape,p}()
+    cv = BezierCellValues(QuadratureRule{shape}(p+2), ip)
     dh = DofHandler(grid)
     add!(dh, :u, ip)
     close!(dh)
@@ -162,7 +163,7 @@ end
     #Greville points give the identity geometry
     grid = BezierGrid(mesh)
     for cellid in 1:getncells(grid)
-        (ξa, ξb, ηa, ηb) = mesh.elements[cellid]
+        ((ξa, ξb), (ηa, ηb)) = mesh.elements[cellid]
         xb, _ = get_bezier_coordinates(grid, cellid)
         @test xb[1] ≈ Vec((ξa, ηa)) && xb[3] ≈ Vec((ξb, ηb))
     end
@@ -170,7 +171,7 @@ end
     for (set, nel) in (("bottom", 2), ("top", 8))
         facets = getfacetset(grid, set)
         @test length(facets) >= nel
-        @test sum(f -> mesh.elements[f[1]][2] - mesh.elements[f[1]][1], facets) ≈ 2.0
+        @test sum(f -> mesh.elements[f[1]][1][2] - mesh.elements[f[1]][1][1], facets) ≈ 2.0
     end
 
     #Facet integration on the boundary of the graded mesh
@@ -210,6 +211,8 @@ end
             mesh = _tmesh_with_segments(vsegs, hsegs; p)
             AS = is_analysis_suitable(mesh)
             @test AS == expected[p][k]
+            #In 2D, analysis-suitable and dual-compatible T-meshes are the same (Beirão da Veiga et al., 2013)
+            @test is_dual_compatible(mesh) == AS
             #Analysis-suitable T-splines are linearly independent and locally linearly independent, 
             #i.e. there are (p+1)^2 functions on each element. (For these meshes, the reverse also holds.)
             @test AS == all(ien -> length(ien) == (p+1)^2, mesh.IEN)
@@ -258,8 +261,8 @@ end
         @test all(ien -> length(ien) == (p+1)^2, mesh.IEN)
         #The knots extend outside of the domain, but the elements do not
         @test mesh.knots[1][1] < 0.0 && mesh.knots[1][end] > 2.0
-        @test all(e -> 0.0 <= e[1] && e[2] <= 2.0, mesh.elements)
-        @test sum(e -> (e[2]-e[1])*(e[4]-e[3]), mesh.elements) ≈ 2.0
+        @test all(e -> 0.0 <= e[1][1] && e[1][2] <= 2.0, mesh.elements)
+        @test sum(e -> prod(b -> b[2] - b[1], e), mesh.elements) ≈ 2.0
         @test getncells(mesh) == getncells(open_mesh) && getnnodes(mesh) == getnnodes(open_mesh)
         for beo in compute_bezier_extraction_operators(mesh)
             @test sum(Vector(r) for r in beo.C) ≈ ones((p+1)^2)
@@ -268,6 +271,92 @@ end
         grid = BezierGrid(mesh)
         @test length(getnodeset(grid, "left")) == length(getnodeset(grid, "right")) == p * length(getnodeset(BezierGrid(open_mesh), "left"))
         @test length(getnodeset(grid, "bottom")) == 4 + p
+    end
+end
+
+#Extrude a 2D T-mesh in the z-direction with a tensor product knot vector
+function _extrude_tmesh(mesh2d::TSplineMesh{2}, zknots)
+    cells = [(c[1]..., c[2]..., k, k+1) for c in mesh2d.cells for k in 1:length(zknots)-1]
+    return TSplineMesh((mesh2d.knots..., zknots), mesh2d.order, cells)
+end
+
+@testset "T-splines: 3D" begin
+    #NURBS as T-splines
+    for p in (2, 3)
+        nurbs = generate_nurbs_patch(:cube, (2, 3, 2), p)
+        tmesh = TSplineMesh(nurbs)
+        @test is_dual_compatible(tmesh) && is_analysis_suitable(tmesh)
+        nurbsgrid = BezierGrid(nurbs)
+        tgrid = BezierGrid(tmesh)
+        @test eltype(tgrid.cells) == TSplineCell{RefHexahedron, p, (p+1)^3}
+        for cellid in 1:getncells(nurbsgrid)
+            @test get_bezier_coordinates(nurbsgrid, cellid)[1] ≈ get_bezier_coordinates(tgrid, cellid)[1]
+            nodes1, nodes2 = nurbsgrid.cells[cellid].nodes, tgrid.cells[cellid].nodes
+            for (a, A) in pairs(nodes2)
+                @test Vector(nurbsgrid.beo[cellid].C[findfirst(==(A), nodes1)]) ≈ Vector(tgrid.beo[cellid].C[a])
+            end
+        end
+    end
+
+    #Graded box, coarse at the bottom and fine at the top
+    for p in (2, 3), periodic in (false, (true, false), (true, true))
+        mesh = generate_tspline_patch(:graded_box, [2, 4], [2, 4], [1, 2], p; size = (2.0, 1.0, 1.0), periodic)
+        @test is_dual_compatible(mesh)
+        @test is_analysis_suitable(mesh)
+        @test is_linearly_independent(mesh)
+        @test all(ien -> length(ien) == (p+1)^3, mesh.IEN)
+        @test sum(e -> prod(b -> b[2] - b[1], e), mesh.elements) ≈ 2.0
+        for beo in compute_bezier_extraction_operators(mesh)
+            @test sum(Vector(r) for r in beo.C) ≈ ones((p+1)^3)
+        end
+        grid = BezierGrid(mesh)
+        @test length(getnodeset(grid, "bottom")) == (2 + p)^2
+        @test length(getnodeset(grid, "top")) == (4 + p)^2
+        #Facet integration gives the areas of the sides
+        fv = BezierFacetValues(FacetQuadratureRule{RefHexahedron}(p+1), IGAInterpolation{RefHexahedron,p}())
+        for (set, area) in (("left", 1.0), ("right", 1.0), ("front", 2.0), ("back", 2.0), ("bottom", 2.0), ("top", 2.0))
+            A = 0.0
+            for (cellid, facetid) in getfacetset(grid, set)
+                reinit!(fv, getcoordinates(grid, cellid), facetid)
+                A += sum(qp -> getdetJdV(fv, qp), 1:getnquadpoints(fv))
+            end
+            @test A ≈ area
+        end
+    end
+
+    #An extruded T-mesh is dual-compatible if and only if the 2D T-mesh is analysis-suitable
+    zknots = [0.0, 0.0, 1.0, 2.0, 3.0, 3.0]
+    for (vsegs, hsegs, AS) in (([(2.5, 2.0, 5.0)], [(5.5, 3.0, 6.0)], false), ([(2.5, 1.0, 4.0)], [(6.5, 4.0, 7.0)], true))
+        mesh = _extrude_tmesh(_tmesh_with_segments(vsegs, hsegs), zknots)
+        @test is_dual_compatible(mesh) == AS
+        @test all(ien -> length(ien) == 64, mesh.IEN) == AS
+    end
+    @test_throws ArgumentError tjunction_extensions(_extrude_tmesh(_tmesh_with_segments([(2.5, 1.0, 4.0)], NTuple{3,Float64}[]), zknots))
+
+    #Poisson: patch test and convergence
+    sets = ("left", "right", "front", "back", "bottom", "top")
+    for p in (2, 3)
+        grid = BezierGrid(generate_tspline_patch(:graded_box, [2, 4], [2, 4], [1, 2], p; size = (2.0, 1.0, 1.0)))
+        err, _ = _solve_tspline_poisson(grid, p, x -> 1 + x[1] + 2x[2] + 3x[3], x -> 0.0; dbc_sets = sets)
+        @test err < 1e-10
+    end
+    uex(x) = sin(π*x[1]) * sin(π*x[2]) * sin(π*x[3])
+    f(x) = 3π^2 * uex(x)
+    errors = map((1, 2)) do k
+        grid = BezierGrid(generate_tspline_patch(:graded_box, k .* [2, 4], k .* [2, 4], k .* [1, 2], 2))
+        first(_solve_tspline_poisson(grid, 2, uex, f; dbc_sets = sets))
+    end
+    @test log2(errors[1] / errors[2]) > 2.5
+
+    #VTK export
+    grid = BezierGrid(generate_tspline_patch(:graded_box, [2, 4], [2, 4], [1, 2], 2))
+    dh = DofHandler(grid)
+    add!(dh, :u, IGAInterpolation{RefHexahedron,2}())
+    close!(dh)
+    mktempdir() do dir
+        @test_nowarn VTKIGAFile(joinpath(dir, "tspline3d"), grid) do vtk
+            write_solution(vtk, dh, [x[3] for x in getproperty.(grid.nodes, :x)])
+        end
     end
 end
 

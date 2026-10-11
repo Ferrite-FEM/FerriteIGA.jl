@@ -1,7 +1,8 @@
 #Solve -Δu + c u = f, with the constraints added by `add_constraints!(ch, grid)`. Returns the L2 error, the dof handler and the solution.
 function _solve_with_constraints(grid, p, uex, f, add_constraints!; c = 0.0)
-    ip = IGAInterpolation{RefQuadrilateral,p}()
-    cv = BezierCellValues(QuadratureRule{RefQuadrilateral}(p+2), ip)
+    shape = Ferrite.getrefshape(getcells(grid, 1))
+    ip = IGAInterpolation{shape,p}()
+    cv = BezierCellValues(QuadratureRule{shape}(p+2), ip)
     dh = DofHandler(grid)
     add!(dh, :u, ip)
     close!(dh)
@@ -139,7 +140,8 @@ end
 #Largest jumps of the value, gradient and hessian of a random periodic field across the seam x = x0/x1
 function _periodic_seam_jumps(mesh, p)
     grid = BezierGrid(mesh)
-    ip = IGAInterpolation{RefQuadrilateral,p}()
+    shape = Ferrite.getrefshape(getcells(grid, 1))
+    ip = IGAInterpolation{shape,p}()
     dh = DofHandler(grid)
     add!(dh, :u, ip)
     close!(dh)
@@ -149,15 +151,16 @@ function _periodic_seam_jumps(mesh, p)
     a = [sin(17.0 * i) for i in 1:ndofs(dh)]
     apply!(a, ch)
 
-    ηs = (-0.7, 0.1, 0.6)
-    cvl = BezierCellValues(QuadratureRule{RefQuadrilateral}(ones(3), [Vec(-1.0, η) for η in ηs]), ip; update_hessians = true)
-    cvr = BezierCellValues(QuadratureRule{RefQuadrilateral}(ones(3), [Vec( 1.0, η) for η in ηs]), ip; update_hessians = true)
+    #Points on the left (ξ = -1) and right (ξ = 1) facets of the reference element
+    facet_points = Ferrite.getrefdim(shape) == 2 ? [(-0.7,), (0.1,), (0.6,)] : [(-0.7, 0.2), (0.1, -0.5), (0.6, 0.8)]
+    cvl = BezierCellValues(QuadratureRule{shape}(ones(3), [Vec(-1.0, η...) for η in facet_points]), ip; update_hessians = true)
+    cvr = BezierCellValues(QuadratureRule{shape}(ones(3), [Vec( 1.0, η...) for η in facet_points]), ip; update_hessians = true)
     hessian(cv, qp, ae) = sum(i -> shape_hessian(cv, qp, i) * ae[i], eachindex(ae))
     jumps = zeros(3)
     x1 = mesh.domain[1][2]
     for (cl, _) in getfacetset(grid, "left")
         el = mesh.elements[cl]
-        cr = findfirst(e -> e[2] == x1 && e[3] == el[3] && e[4] == el[4], mesh.elements)
+        cr = findfirst(e -> e[1][2] == x1 && e[2:end] == el[2:end], mesh.elements)
         reinit!(cvl, getcoordinates(grid, cl))
         reinit!(cvr, getcoordinates(grid, cr))
         al, ar = a[celldofs(dh, cl)], a[celldofs(dh, cr)]
@@ -192,4 +195,27 @@ end
         end))
     end
     @test log2(errors[1] / errors[2]) > 3.7
+end
+
+@testset "PeriodicIGADirichlet in 3D" begin
+    #Periodic knot vectors in x: C^(p-1) across the seam
+    for p in (2, 3)
+        mesh = generate_tspline_patch(:graded_box, [2, 4], [2, 4], [1, 2], p; size = (2.0, 1.0, 1.0), periodic = (true, false))
+        jumps = _periodic_seam_jumps(mesh, p)
+        @test jumps[1] < 1e-10 && jumps[2] < 1e-10
+        p == 3 && @test jumps[3] < 1e-9
+        open_jumps = _periodic_seam_jumps(generate_tspline_patch(:graded_box, [2, 4], [2, 4], [1, 2], p; size = (2.0, 1.0, 1.0)), p)
+        @test open_jumps[2] > 1.0
+    end
+
+    #Periodic in x and y, with Dirichlet conditions at the bottom and top
+    uex(x) = cos(2π*x[1]) * cos(2π*x[2]) * sin(π*x[3])
+    f(x) = 9π^2 * uex(x)
+    grid = BezierGrid(generate_tspline_patch(:graded_box, [4, 8], [4, 8], [2, 4], 2; periodic = (true, true)))
+    err, dh, ch, a = _solve_with_constraints(grid, 2, uex, f, (ch, grid) -> begin
+        add!(ch, Dirichlet(:u, union(getfacetset(grid, "bottom"), getfacetset(grid, "top")), x -> 0.0))
+        add!(ch, PeriodicIGADirichlet(:u, getfacetset(grid, "left"), getfacetset(grid, "right")))
+        add!(ch, PeriodicIGADirichlet(:u, getfacetset(grid, "front"), getfacetset(grid, "back")))
+    end)
+    @test err < 2e-2
 end

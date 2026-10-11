@@ -314,17 +314,17 @@ Compute the Bézier extraction operator of each element of the T-spline. The row
 correspond to the basis functions `mesh.IEN[e]`, and the columns to the Bernstein basis functions 
 (ordered as in `IGAInterpolation`).
 """
-function compute_bezier_extraction_operators(mesh::TSplineMesh{sdim,T}) where {sdim,T}
+function compute_bezier_extraction_operators(mesh::TSplineMesh{pdim,sdim,T}) where {pdim,sdim,T}
 	p = mesh.order
-	ordering = _bernstein_ordering(Bernstein{RefQuadrilateral,p}())
+	ordering = _bernstein_ordering(Bernstein{RefHypercube{pdim},p}())
 	beos = BezierExtractionOperator{T}[]
-	for (e, (ξa, ξb, ηa, ηb)) in enumerate(mesh.elements)
+	for (e, bounds) in enumerate(mesh.elements)
 		rows = SparseVector{T,Int}[]
 		for A in mesh.IEN[e]
-			Ξ, Π = mesh.local_knots[A]
-			c1 = _bspline_bezier_coefficients(Ξ, p, ξa, ξb)
-			c2 = _bspline_bezier_coefficients(Π, p, ηa, ηb)
-			push!(rows, sparsevec(kron(c2, c1)[ordering]))
+			Ks = mesh.local_knots[A]
+			cs = ntuple(d -> _bspline_bezier_coefficients(Ks[d], p, bounds[d][1], bounds[d][2]), pdim)
+			#The first direction runs fastest, as in the tensor product NURBS extraction
+			push!(rows, sparsevec(kron(reverse(cs)...)[ordering]))
 		end
 		push!(beos, BezierExtractionOperator(rows))
 	end

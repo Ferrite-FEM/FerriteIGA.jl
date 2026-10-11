@@ -67,44 +67,43 @@ end
     BezierGrid(mesh::TSplineMesh)
 
 Grid of the Bézier elements of a T-spline, with one `TSplineCell` per element. Cells with different 
-numbers of basis functions have different types, so the grid has mixed cell types. 
+numbers of basis functions have different types, so the grid has mixed cell types (this only happens 
+for T-meshes which are not analysis-suitable).
 
-The grid contains the nodesets and facetsets `"left"`, `"right"`, `"bottom"` and `"top"` for the 
-boundaries of the parametric domain (`mesh.domain`). The nodesets contain the control points whose basis function is 
+The grid contains nodesets and facetsets for the boundaries of the parametric domain (`mesh.domain`): 
+`"left"`, `"right"` (x) and `"bottom"`, `"top"` (y) in 2D, and `"left"`, `"right"` (x), `"front"`, `"back"` (y) 
+and `"bottom"`, `"top"` (z) in 3D. The nodesets contain the control points whose basis function is 
 non-zero on the boundary.
 """
-function BezierGrid(mesh::TSplineMesh{sdim,T}) where {sdim,T}
+function BezierGrid(mesh::TSplineMesh{pdim,sdim,T}) where {pdim,sdim,T}
 	p = mesh.order
-	cells_any = [TSplineCell{RefQuadrilateral,p}(Tuple(ien)) for ien in mesh.IEN]
+	cells_any = [TSplineCell{RefHypercube{pdim},p}(Tuple(ien)) for ien in mesh.IEN]
 	CT = Union{unique(typeof.(cells_any))...}
 	cells = convert(Vector{CT}, cells_any)
 	nodes = [Node(x) for x in mesh.control_points]
 	beos = compute_bezier_extraction_operators(mesh)
 
-	(umin, umax), (vmin, vmax) = mesh.domain
-
-	#A basis function is non-zero on a boundary line if the line passes through the interior of its support,
-	#or if the line is at the end of the support and the knot there has multiplicity p+1 (open knot vector)
+	#A basis function is non-zero on a boundary plane if the plane passes through the interior of its support,
+	#or if the plane is at the end of the support and the knot there has multiplicity p+1 (open knot vector)
 	nonzero_at_start(K, u) = K[1] < u < K[end] || K[1] == K[p+1] == u
 	nonzero_at_end(K, u)   = K[1] < u < K[end] || K[2] == K[p+2] == u
-	nodesets = Dict{String,OrderedSet{Int}}(name => OrderedSet{Int}() for name in ("left", "right", "bottom", "top"))
-	for (A, (Ξ, Π)) in enumerate(mesh.local_knots)
-		nonzero_at_start(Ξ, umin) && push!(nodesets["left"], A)
-		nonzero_at_end(Ξ, umax)   && push!(nodesets["right"], A)
-		nonzero_at_start(Π, vmin) && push!(nodesets["bottom"], A)
-		nonzero_at_end(Π, vmax)   && push!(nodesets["top"], A)
-	end
 
-	facetsets = Dict{String,OrderedSet{FacetIndex}}(name => OrderedSet{FacetIndex}() for name in ("left", "right", "bottom", "top"))
-	for (e, (ξa, ξb, ηa, ηb)) in enumerate(mesh.elements)
-		ηa == vmin && push!(facetsets["bottom"], FacetIndex(e, 1))
-		ξb == umax && push!(facetsets["right"],  FacetIndex(e, 2))
-		ηb == vmax && push!(facetsets["top"],    FacetIndex(e, 3))
-		ξa == umin && push!(facetsets["left"],   FacetIndex(e, 4))
+	nodesets  = Dict{String,OrderedSet{Int}}()
+	facetsets = Dict{String,OrderedSet{FacetIndex}}()
+	for (d, ((startname, startfacet), (endname, endfacet))) in enumerate(_tspline_boundary_names(Val(pdim)))
+		u0, u1 = mesh.domain[d]
+		nodesets[startname] = OrderedSet{Int}(A for (A, Ks) in enumerate(mesh.local_knots) if nonzero_at_start(Ks[d], u0))
+		nodesets[endname]   = OrderedSet{Int}(A for (A, Ks) in enumerate(mesh.local_knots) if nonzero_at_end(Ks[d], u1))
+		facetsets[startname] = OrderedSet{FacetIndex}(FacetIndex(e, startfacet) for (e, bounds) in enumerate(mesh.elements) if bounds[d][1] == u0)
+		facetsets[endname]   = OrderedSet{FacetIndex}(FacetIndex(e, endfacet) for (e, bounds) in enumerate(mesh.elements) if bounds[d][2] == u1)
 	end
 
 	return BezierGrid(cells, nodes, mesh.weights, beos; nodesets, facetsets)
 end
+
+#Names and facet numbers (Ferrite's numbering) of the boundaries at the start and end of each parametric direction
+_tspline_boundary_names(::Val{2}) = ((("left", 4), ("right", 2)), (("bottom", 1), ("top", 3)))
+_tspline_boundary_names(::Val{3}) = ((("left", 5), ("right", 3)), (("front", 2), ("back", 4)), (("bottom", 1), ("top", 6)))
 
 function BezierGrid(grid::Ferrite.Grid{dim,C,T}) where {dim,C,T}
 	weights = ones(T, getnnodes(grid))
