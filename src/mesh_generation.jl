@@ -646,7 +646,11 @@ function _generate_layered_tspline(nels::NTuple{dim,AbstractVector{Int}}, order:
 			else
 				nextend = periodic[d] ? order : 0
 				h = size[d] / nels[d][k]
-				collect(range(cornerpos[d] - nextend*h, cornerpos[d] + size[d] + nextend*h, length = nels[d][k] + 1 + 2nextend))
+				v = collect(range(cornerpos[d] - nextend*h, cornerpos[d] + size[d] + nextend*h, length = nels[d][k] + 1 + 2nextend))
+				#The domain bounds must be exact lines of the T-mesh (the range can be off by round-off there)
+				v[nextend+1] = cornerpos[d]
+				v[end-nextend] = cornerpos[d] + size[d]
+				v
 			end
 		end
 	end
