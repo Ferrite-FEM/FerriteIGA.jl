@@ -10,8 +10,10 @@ GENERATEDEXAMPLES = [joinpath("examples", f) for f in (
     )]
 
 makedocs(
-    sitename = "FerriteIGA",
-    format = Documenter.HTML(),
+    sitename = "FerriteIGA.jl",
+    format = Documenter.HTML(
+        assets = ["assets/custom.css"],
+    ),
     doctest = false,
     modules = [FerriteIGA],
     checkdocs = :exports,
