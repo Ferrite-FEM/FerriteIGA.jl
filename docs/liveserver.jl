@@ -27,8 +27,12 @@ LiveServer.servedocs(;
         # to avoid infinite loops where running make.jl updates watched files,
         # which then triggers a new run of make.jl etc.
         joinpath(repo_root, "docs/src/examples"),
+        # Same for the generated figures of the tutorials
+        joinpath(repo_root, "docs/src/figures"),
     ],
     include_files = [
         joinpath(repo_root, "docs/generate.jl"),
+        joinpath(repo_root, "docs/generate_figures.jl"),
+        joinpath(repo_root, "docs/generate_figures_tsplines.jl"),
     ],
 )

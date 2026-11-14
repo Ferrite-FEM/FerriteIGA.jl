@@ -2,6 +2,7 @@ using Documenter
 using FerriteIGA
 
 include("generate.jl")
+include("generate_figures.jl") # figures of the tutorials, written to docs/src/figures
 
 GENERATEDEXAMPLES = [joinpath("examples", f) for f in (
     "plate_with_hole.md",
@@ -19,7 +20,8 @@ makedocs(
     warnonly = Documenter.except(:missing_docs),
     pages = Any[
         "Home" => "index.md",
-        "Manual" => ["splines.md", "meshes.md", "bezier_extraction.md", "tsplines.md"],
+        "Tutorials" => ["nurbs.md", "tsplines.md"],
+        "Manual" => ["splines.md", "meshes.md", "bezier_extraction.md"],
         "Examples" => GENERATEDEXAMPLES,
         "API" => ["api.md", "nurbsmesh.md"],
     ]
