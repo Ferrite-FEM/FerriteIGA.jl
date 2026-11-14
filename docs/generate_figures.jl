@@ -1,4 +1,4 @@
-# Generates the figures of the tutorials (docs/src/nurbs.md and docs/src/tsplines.md).
+# Generates the figures of the manual pages (docs/src/nurbs.md, docs/src/bezier_extraction.md and docs/src/tsplines.md).
 #
 # The figures are computed with FerriteIGA itself (T-meshes, local knot vectors, T-junction extensions,
 # Bézier elements, ...), so they always show what the implementation does.
@@ -511,11 +511,13 @@ function nurbs_figures()
 end
 
 include("generate_figures_tsplines.jl")
+include("generate_figures_bezier.jl")
 
 function generate()
     setup_style()
     nurbs_figures()
     tspline_figures()
+    bezier_figures()
     @info "Tutorial figures written to $FIGDIR"
 end
 

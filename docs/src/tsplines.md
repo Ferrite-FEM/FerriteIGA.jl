@@ -1,8 +1,8 @@
 # T-splines
 
-This page explains T-splines by starting from what is already known about NURBS, and then shows how they are used in FerriteIGA. It assumes that you have read the [B-splines and NURBS](@ref) tutorial, in particular the sections on [Local knot vectors](@ref) and the index space ([Three ways to look at a patch](@ref)).
+This page explains T-splines by starting from what is already known about NURBS, and then shows how they are used in FerriteIGA. It assumes that you have read the [B-splines and NURBS](@ref) page, in particular the sections on [Local knot vectors](@ref) and the index space ([Three ways to look at a patch](@ref)).
 
-The first part of the page is a tutorial. The sections from [Grids with T-spline cells](@ref) onwards are reference material. All figures are computed with FerriteIGA (see `docs/generate_figures.jl`).
+The first part of the page is an introduction. The sections from [Grids with T-spline cells](@ref) onwards are reference material. All figures are computed with FerriteIGA (see `docs/generate_figures.jl`).
 
 ## Why T-splines?
 
@@ -14,11 +14,11 @@ A NURBS patch is a tensor product: every knot line runs through the whole patch.
 
 T-splines (Sederberg et al., 2003) remove this restriction. A line of the mesh is allowed to end in the middle of the mesh. The point where it ends is called a **T-junction**, because the mesh looks like the letter T there. Everything else stays as close to NURBS as possible: the basis functions are still products of B-splines, there is still one control point per basis function, and a T-spline without T-junctions *is* a NURBS.
 
-The question that the rest of this tutorial answers is: if the knot lines no longer run through the whole patch, what are the basis functions?
+The question that the rest of this introduction answers is: if the knot lines no longer run through the whole patch, what are the basis functions?
 
 ## A NURBS patch seen as a T-spline
 
-The answer builds on an observation from the NURBS tutorial: a B-spline basis function of degree ``p`` does not need the whole knot vector. It only needs its own *local knot vector* of ``p + 2`` consecutive knots. So instead of saying "here is a global knot vector, and function number ``i`` uses the knots ``i`` to ``i + p + 1``", we can give each function a position in the mesh, called its **anchor**, and a rule for collecting the knots around the anchor. For a NURBS this gives nothing new. For a T-spline, it is the definition.
+The answer builds on an observation from the NURBS page: a B-spline basis function of degree ``p`` does not need the whole knot vector. It only needs its own *local knot vector* of ``p + 2`` consecutive knots. So instead of saying "here is a global knot vector, and function number ``i`` uses the knots ``i`` to ``i + p + 1``", we can give each function a position in the mesh, called its **anchor**, and a rule for collecting the knots around the anchor. For a NURBS this gives nothing new. For a T-spline, it is the definition.
 
 ### One direction
 

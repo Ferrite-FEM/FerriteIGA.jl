@@ -53,7 +53,7 @@ mesh = generate_tspline_patch(:graded_rectangle, nels_x, nels_y, order;
 # The vertical lines of a layer end in T-junctions at the interface to the coarser layer below. Since all horizontal
 # lines span the whole width, all T-junctions are vertical, and the mesh is analysis-suitable. Therefore, the basis
 # functions are linearly independent, form a partition of unity, and have the same approximation properties as NURBS.
-#is_analysis_suitable(mesh)
+is_analysis_suitable(mesh)
 
 # As for NURBS patches, the T-spline is converted to a `BezierGrid` for the analysis. Each cell is a Bézier element
 # with a Bézier extraction operator. Note that the elements are bounded by all lines of reduced continuity of the

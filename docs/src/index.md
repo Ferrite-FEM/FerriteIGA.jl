@@ -4,7 +4,7 @@ Isogeometric analysis in the [Ferrite](https://github.com/Ferrite-FEM/Ferrite.jl
 
 The basis is a B-spline or NURBS space, the same functions used for CAD geometry. Degrees of freedom, constraints, and assembly use the Ferrite interface. Bézier extraction converts the splines into Bernstein polynomials so the geometry works with a standard finite element code.
 
-If you are new to splines, start with the two tutorials: [B-splines and NURBS](@ref) and [T-splines](@ref). The [Splines](@ref), [Meshes](@ref), and [Bezier extraction](@ref) pages expand the topics below. Examples include the [Infinite plate with hole](@ref), [structural vibrations](@ref structural_vibrations) of an elastic rod, and a [Kirchhoff plate](@ref kirchhoff_plate).
+The manual explains the topics below step by step: [B-splines and NURBS](@ref), [Bezier extraction](@ref), and [T-splines](@ref). The mesh generators are listed on the [Meshes](@ref) page. Examples include the [Infinite plate with hole](@ref), [structural vibrations](@ref structural_vibrations) of an elastic rod, and a [Kirchhoff plate](@ref kirchhoff_plate).
 
 ## Isogeometric analysis
 

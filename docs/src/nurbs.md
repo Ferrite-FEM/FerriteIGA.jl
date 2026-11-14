@@ -1,6 +1,6 @@
 # B-splines and NURBS
 
-This page is a step-by-step introduction to the functions that isogeometric analysis is built on. It starts with a single curve in one parameter and works up to surfaces. No prior knowledge of splines is needed, only some familiarity with finite elements. The [Splines](@ref) page is the short reference version of the same material, and the [T-splines](@ref) tutorial continues where this page ends.
+This page is a step-by-step introduction to the functions that isogeometric analysis is built on. It starts with a single curve in one parameter and works up to surfaces. No prior knowledge of splines is needed, only some familiarity with finite elements. The pages [Bezier extraction](@ref) and [T-splines](@ref) continue where this page ends.
 
 All figures on this page are computed with FerriteIGA (see `docs/generate_figures.jl`).
 
@@ -179,7 +179,7 @@ refined.knot_vectors[1]
 length(curve.control_points), length(refined.control_points)
 ```
 
-There are two more ways to refine a spline. *Order elevation* ([`orderelevation`](@ref)) raises the degree and keeps the continuity at the knots. Raising the degree first and inserting knots afterwards ([`smoothnesselevation`](@ref)) gives new elements that are joined with ``C^{p}`` continuity; this is called *k-refinement* and has no counterpart in standard finite elements. See the Refinement section of the [Splines](@ref) page.
+There are two more ways to refine a spline. *Order elevation* ([`orderelevation`](@ref)) raises the degree and keeps the continuity at the knots. Raising the degree first and inserting knots afterwards ([`smoothnesselevation`](@ref)) gives new elements that are joined with ``C^{p}`` continuity; this is called *k-refinement* and has no counterpart in standard finite elements. See [Refinement of a patch](@ref) on the NURBSMesh page.
 
 ## Rational splines
 
@@ -312,7 +312,7 @@ The tensor product makes NURBS simple, but it has a price. A new knot in the ``\
 
 *Left: to split the blue element of a NURBS patch, the new knot lines (orange) must run through the whole patch, which refines elements that did not need it. Right: the local refinement we would like to have. The new lines end in the middle of the mesh, in so-called T-junctions.*
 
-In an analysis, we typically want small elements in a small region (a stress concentration, a boundary layer) and large elements elsewhere. With NURBS, every local refinement turns into rows and columns of unwanted elements. Removing this restriction is the idea behind T-splines, which are the subject of the next tutorial: [T-splines](@ref).
+In an analysis, we typically want small elements in a small region (a stress concentration, a boundary layer) and large elements elsewhere. With NURBS, every local refinement turns into rows and columns of unwanted elements. Removing this restriction is the idea behind T-splines, which have their own page: [T-splines](@ref).
 
 ## Summary
 

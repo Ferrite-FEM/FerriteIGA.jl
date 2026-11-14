@@ -62,10 +62,6 @@ Ferrite.add!(::ConstraintHandler{<:DofHandler{<:Any, <:BezierGrid}}, ::PeriodicI
 VTKIGAFile
 ```
 
-## NURBS patches
+## Mesh types and generators
 
-Mesh construction and evaluation. Refinement APIs live on the [NURBSMesh](@ref) page.
-
-```@docs
-generate_nurbs_patch
-```
+The patch type and its refinement functions are on the [NURBSMesh](@ref) page, the mesh generators on the [Meshes](@ref) page, and the T-spline types on the [T-splines](@ref) page.
