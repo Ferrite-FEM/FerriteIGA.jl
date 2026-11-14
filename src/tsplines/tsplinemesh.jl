@@ -99,12 +99,18 @@ end
 """
 	TSplineMesh(mesh::NURBSMesh)
 
-Represent a NURBS patch (2D or 3D, with equal orders in all directions) as a T-spline.
+Represent a NURBS patch (2D or 3D, with equal orders in all directions and open knot vectors) as a T-spline.
 The T-mesh is the full tensor product mesh, so the basis is identical to the NURBS basis.
 """
 function TSplineMesh(mesh::NURBSMesh{pdim,sdim,T}) where {pdim,sdim,T}
 	allequal(mesh.orders) || throw(ArgumentError("TSplineMesh requires equal orders in all directions."))
 	p = first(mesh.orders)
+	#The boundary knots of the T-mesh are repeated up to multiplicity p+1, which is only correct for open knot vectors
+	for (d, kv) in enumerate(mesh.knot_vectors)
+		if !(allequal(view(kv, 1:p+1)) && allequal(view(kv, length(kv)-p:length(kv))))
+			throw(ArgumentError("TSplineMesh requires open knot vectors (the first and last knot repeated $(p+1) times), but the knot vector in direction $d is not open."))
+		end
+	end
 	s = cld(p,2)
 	knots = ntuple(d -> mesh.knot_vectors[d][(s+1):(end-s)], pdim)
 	n = length.(knots)
@@ -165,15 +171,12 @@ function _validate_tmesh(knots::NTuple{pdim,Vector{T}}, p::Int, boxes::Vector{NT
 	all(==(1), count) || throw(ArgumentError("The cells do not tile the index domain (overlaps or gaps)."))
 
 	walls = ntuple(_ -> Set{NTuple{pdim,Int}}(), pdim)
-	vertices = Set{NTuple{pdim,Int}}()
 	for box in boxes
 		for d in 1:pdim, i in box[d], I in CartesianIndices(_other_ranges(box, d))
 			push!(walls[d], Base.setindex(Tuple(I), i, d))
 		end
-		for corner in Iterators.product(box...)
-			push!(vertices, corner)
-		end
 	end
+	vertices = _tmesh_vertices(walls)
 
 	#Two vertices on opposite sides of a face, with the same index coordinate, must be connected (only checked in 2D)
 	if pdim == 2
@@ -197,6 +200,28 @@ function _validate_tmesh(knots::NTuple{pdim,Vector{T}}, p::Int, boxes::Vector{NT
 	end
 
 	return walls, vertices
+end
+
+"""
+	_tmesh_vertices(walls)
+
+The vertices of the T-mesh: the points where walls of all directions meet. In 2D these are the corners of the cells.
+In 3D they are the corners of the boxes, and also the points where two edges of the T-mesh cross without being a
+corner of a box (e.g. where a plane `x = const` below a plane `z = const` meets a plane `y = const` above it).
+Without an anchor at these points, the basis functions of odd degree would not be a partition of unity.
+"""
+function _tmesh_vertices(walls::NTuple{pdim,Set{NTuple{pdim,Int}}}) where {pdim}
+	#A wall orthogonal to d touches the point X if one of the unit walls around X, at the index X[d], is in the T-mesh
+	touches(X, d) = any(I -> Base.setindex(I, X[d], d) in walls[d],
+		Iterators.product(ntuple(e -> e == d ? (0,) : (X[e]-1, X[e]), pdim)...))
+	vertices = Set{NTuple{pdim,Int}}()
+	#Every vertex is a corner of a unit wall orthogonal to the first direction
+	for I in walls[1], offset in Iterators.product(ntuple(e -> e == 1 ? (0,) : (0, 1), pdim)...)
+		X = I .+ offset
+		X in vertices && continue
+		all(d -> touches(X, d), 2:pdim) && push!(vertices, X)
+	end
+	return vertices
 end
 
 function _compute_anchors(p::Int, boxes::Vector{NTuple{pdim,NTuple{2,Int}}}, vertices) where {pdim}

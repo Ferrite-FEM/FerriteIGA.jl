@@ -145,6 +145,17 @@ end
     end
 end
 
+@testset "T-splines: NURBS with unsupported knot vectors" begin
+    #Only open knot vectors can be converted (the boundary knots of the T-mesh are repeated)
+    kv = collect(0.0:7.0)
+    cps = [Vec((Float64(i), Float64(j))) for j in 1:5 for i in 1:5]
+    @test_throws ArgumentError TSplineMesh(NURBSMesh((kv, copy(kv)), (2, 2), cps))
+    open_kv = [0.0, 0.0, 0.0, 1.0, 2.0, 3.0, 3.0, 3.0]
+    @test_throws ArgumentError TSplineMesh(NURBSMesh((open_kv, kv), (2, 2), cps))
+    @test TSplineMesh(NURBSMesh((open_kv, copy(open_kv)), (2, 2), cps)) isa TSplineMesh
+    @test_throws ArgumentError TSplineMesh(generate_nurbs_patch(:rectangle, (2, 2), (2, 3); size = (1.0, 1.0)))
+end
+
 @testset "T-splines: graded mesh" begin
     mesh = generate_tspline_patch(:graded_rectangle, [2, 4, 8], [1, 2, 4], 3; size = (2.0, 1.0))
     @test is_analysis_suitable(mesh)
@@ -323,6 +334,22 @@ end
             @test A ≈ area
         end
     end
+
+    #Layers which do not refine each other: planes x = const of one layer meet planes y = const of the next layer
+    #in points which are not corners of a box. These points are vertices (anchors for odd degrees) of the T-mesh.
+    for p in (1, 2, 3), (nx, ny) in (([2, 1], [1, 2]), ([4, 2], [2, 4]), ([2, 3], [3, 2]))
+        mesh = generate_tspline_patch(:graded_box, nx, ny, [1, 1], p)
+        @test is_analysis_suitable(mesh)
+        @test is_linearly_independent(mesh)
+        @test all(ien -> length(ien) == (p+1)^3, mesh.IEN)
+        for beo in compute_bezier_extraction_operators(mesh)
+            @test sum(Vector(r) for r in beo.C) ≈ ones((p+1)^3)
+        end
+    end
+    #Patch test on a cubic mesh with crossing planes at the layer interface
+    grid = BezierGrid(generate_tspline_patch(:graded_box, [3, 2], [2, 3], [1, 1], 3; size = (2.0, 1.0, 1.0)))
+    err, _ = _solve_tspline_poisson(grid, 3, x -> 1 + x[1] + 2x[2] + 3x[3], x -> 0.0; dbc_sets = ("left", "right", "front", "back", "bottom", "top"))
+    @test err < 1e-10
 
     #An extruded T-mesh is dual-compatible if and only if the 2D T-mesh is analysis-suitable
     zknots = [0.0, 0.0, 1.0, 2.0, 3.0, 3.0]
