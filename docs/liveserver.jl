@@ -26,7 +26,7 @@ LiveServer.servedocs(;
         # Skip the folder where Literate.jl output is written. This is needed
         # to avoid infinite loops where running make.jl updates watched files,
         # which then triggers a new run of make.jl etc.
-        joinpath(repo_root, "docs/src/examples"),
+        joinpath(repo_root, "docs/src/tutorials"),
     ],
     include_files = [
         joinpath(repo_root, "docs/generate.jl"),

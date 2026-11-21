@@ -1,6 +1,6 @@
 # # [Structural vibrations](@id structural_vibrations)
 
-# In this example, we will compare traditional Finite Element Method (FEM) with Isogeometric Analysis (IGA) for analysing structural vibration problems. We aim to replicate the results from __Cottrell, J. et al, Isogeometric analysis of structural vibrations, In Computer Methods in Applied Mechanics and Engineering [https://doi.org/10.1016/j.cma.2005.09.027](https://doi.org/10.1016/j.cma.2005.09.027)__ 
+# In this example, we will compare traditional Finite Element Method (FEM) with Isogeometric Analysis (IGA) for analysing structural vibration problems. We aim to replicate the results from [Cottrell2006](@citet).
 
 # Consider the structural vibrations of an elastic rod of unit length, whose natural frequencies and modes are goverened by:
 
@@ -127,3 +127,12 @@ plot!(fig, n_range, normalised_ω_iga, label="Quadratic IGA")
 
 using Test                      #src
 @test ω_iga[10] ≈ 10π atol=1e-4 #src
+
+#md # ## [Plain program](@id structuralvibrations-plain-program)
+#md #
+#md # Here follows a version of the program without any comments.
+#md # The file is also available here: [`structuralvibrations.jl`](structuralvibrations.jl).
+#md #
+#md # ```julia
+#md # @__CODE__
+#md # ```

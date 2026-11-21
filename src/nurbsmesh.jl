@@ -1,8 +1,37 @@
 """
-	NURBSMesh(knot_vectors, orders, control_points, weights=ones(...))
+    NURBSMesh(knot_vectors::NTuple{pdim, Vector{T}}, orders::NTuple{pdim, Int}, control_points::Vector{Vec{sdim, T}}, [weights::Vector{T}])
 
-A NURBS or B-spline patch. `knot_vectors` and `orders` give the basis in each direction.
-`control_points` give the shape. `weights` are all ones for a B-spline.
+A single tensor-product B-spline or NURBS patch with parametric dimension `pdim` and
+spatial dimension `sdim`.
+
+**Arguments:**
+* `knot_vectors`: one (non-decreasing) knot vector per parametric direction.
+* `orders`: the polynomial degree in each parametric direction.
+* `control_points`: the control points. They are ordered with the first parametric
+  direction running fastest, i.e. control point ``(i, j)`` of a 2D patch with ``n_1``
+  basis functions in the first direction has index ``i + (j - 1) n_1``.
+* `weights`: the NURBS weight of each control point. Defaults to all ones, which gives a
+  B-spline patch.
+
+The number of control points must be ``\\prod_d (\\mathrm{length}(\\Xi_d) - p_d - 1)``.
+The cells (elements) of the patch are the non-empty knot spans; knot spans of zero length
+(from repeated knots) are skipped.
+
+A `NURBSMesh` describes the geometry and the spline space. For analysis, it is converted to
+a [`BezierGrid`](@ref). Simple patches can be created with [`generate_nurbs_patch`](@ref),
+and refined with [`knotinsertion`](@ref), [`orderelevation`](@ref) and
+[`smoothnesselevation`](@ref).
+
+# Examples
+A quarter of a circle with radius 1 as a quadratic NURBS curve:
+```julia
+knot_vectors = ([0.0, 0.0, 0.0, 1.0, 1.0, 1.0],)
+control_points = [Vec((1.0, 0.0)), Vec((1.0, 1.0)), Vec((0.0, 1.0))]
+weights = [1.0, 1 / sqrt(2), 1.0]
+mesh = NURBSMesh(knot_vectors, (2,), control_points, weights)
+```
+
+See the [NURBSMesh topic guide](@ref nurbsmesh_topicguide) for more details.
 """
 struct NURBSMesh{pdim,sdim,T}
 	knot_vectors::NTuple{pdim,Vector{T}}
@@ -58,10 +87,21 @@ function _copy_nurbsmesh_data(mesh::NURBSMesh)
 end
 
 """
-	knotinsertion(mesh::NURBSMesh, ξ; dir)
+    knotinsertion(mesh::NURBSMesh, ξ; dir::Int)
 
-Return a new mesh with the knot `ξ` inserted once in parametric direction `dir`.
-The input mesh is unchanged.
+h-refinement: return a new [`NURBSMesh`](@ref) with the knot value `ξ` inserted once in
+parametric direction `dir`. The geometry and the parametrization are unchanged, but the
+spline space is enriched. Inserting a new value splits a knot span into two cells, with
+continuity ``C^{p-1}`` across the new knot. Inserting an existing value instead increases its
+multiplicity ``m`` and lowers the continuity there to ``C^{p-m}``.
+
+The input mesh is not modified, see [`knotinsertion!`](@ref) for the in-place version.
+
+# Examples
+```julia
+mesh = generate_nurbs_patch(:rectangle, (1, 1), 2; size = (1.0, 1.0))
+mesh = knotinsertion(mesh, 0.0; dir = 1)  # two cells in the first direction
+```
 """
 function knotinsertion(mesh::NURBSMesh, ξ::T; dir::Int) where T
 	knot_vectors, orders, control_points, weights = _copy_nurbsmesh_data(mesh)
@@ -70,10 +110,17 @@ function knotinsertion(mesh::NURBSMesh, ξ::T; dir::Int) where T
 end
 
 """
-	orderelevation(mesh::NURBSMesh; dir)
+    orderelevation(mesh::NURBSMesh; dir::Int)
 
-Return a new mesh with the polynomial degree raised by one in direction `dir`.
-The input mesh is unchanged.
+p-refinement: return a new [`NURBSMesh`](@ref) with the polynomial degree raised by one in
+parametric direction `dir`. The geometry and parametrization are unchanged. The
+multiplicity of every knot is increased by one, so the continuity across existing knots is
+preserved.
+
+Note that [`BezierGrid`](@ref) currently requires the same degree in all directions, so
+elevate the degree in every direction before creating the grid.
+
+The input mesh is not modified, see [`orderelevation!`](@ref) for the in-place version.
 """
 function orderelevation(mesh::NURBSMesh; dir::Int)
 	knot_vectors, orders, control_points, weights = _copy_nurbsmesh_data(mesh)
@@ -82,10 +129,15 @@ function orderelevation(mesh::NURBSMesh; dir::Int)
 end
 
 """
-	smoothnesselevation(mesh::NURBSMesh, new_knots; dir)
+    smoothnesselevation(mesh::NURBSMesh, new_knots::AbstractVector; dir::Int)
 
-Return a new mesh after degree elevation and insertion of `new_knots` in
-parametric direction `dir`. The input mesh is unchanged.
+k-refinement: return a new [`NURBSMesh`](@ref) where the degree is first raised by one in
+parametric direction `dir`, and then each value in `new_knots` is inserted once. Since the
+knots are inserted *after* the degree elevation, the continuity across the new knots is
+``C^{p}``, where ``p`` is the original degree. This gives a smoother spline space than doing
+the two operations in the opposite order.
+
+The input mesh is not modified, see [`smoothnesselevation!`](@ref) for the in-place version.
 """
 function smoothnesselevation(mesh::NURBSMesh, new_knots::AbstractVector{T}; dir::Int) where T
 	knot_vectors, orders, control_points, weights = _copy_nurbsmesh_data(mesh)
@@ -94,11 +146,15 @@ function smoothnesselevation(mesh::NURBSMesh, new_knots::AbstractVector{T}; dir:
 end
 
 """
-	eval_parametric_coordinate(mesh::NURBSMesh, ξ)
+    eval_parametric_coordinate(mesh::NURBSMesh{pdim}, ξ::Vec{pdim})
 
-Physical point corresponding to the parameter `ξ` on the patch.
+Evaluate the B-spline geometry map of the patch at the parametric coordinate `ξ`, i.e.
+return the physical point ``\\boldsymbol{x}(\\boldsymbol{\\xi}) = \\sum_A N_A(\\boldsymbol{\\xi}) \\boldsymbol{X}_A``.
 
-TODO: This function is currently very in-effecient for large domain.
+!!! warning
+    The NURBS weights are currently not taken into account, so the result is only exact for
+    B-spline patches (all weights equal to one). Furthermore, all basis functions are
+    evaluated, so the function is slow for large patches.
 """
 function eval_parametric_coordinate(mesh::NURBSMesh{pdim,sdim}, ξ::Vec{pdim}) where {pdim,sdim}
 	bspline = BSplineBasis(mesh.knot_vectors, mesh.orders)
@@ -112,10 +168,14 @@ function eval_parametric_coordinate(mesh::NURBSMesh{pdim,sdim}, ξ::Vec{pdim}) w
 end
 
 """
-	parent_to_parametric_map(nurbsmesh::NURBSMesh{pdim,sdim}, cellid::Int, xi::Vec{pdim})
+    parent_to_parametric_map(mesh::NURBSMesh{pdim}, cellid::Int, xi::Vec{pdim})
 
-Given a coordinate for a cell in the parent domain `xi`, this functions returns the coordinate in 
-the parametric domain.
+Map the coordinate `xi` in the parent (reference) domain ``[-1, 1]^{pdim}`` of cell
+`cellid` to the corresponding coordinate in the parametric (knot) domain of the patch. The
+result is returned as a `Vector` with `pdim` entries.
+
+Together with [`eval_parametric_coordinate`](@ref) this can be used to find the physical
+position of a point on a cell.
 """
 function parent_to_parametric_map(nurbsmesh::NURBSMesh{pdim}, cellid::Int, xi::Vec{pdim}) where {pdim}
 	Ξ = nurbsmesh.knot_vectors
@@ -166,9 +226,28 @@ function generate_nurbs_meshdata(orders::NTuple{dim,Int}, nbf::NTuple{dim,Int}) 
 end
 
 """
-	knotinsertion!(knot_vectors, orders, control_points, weights, ξ; dir)
+    knotinsertion!(knot_vectors, orders, control_points, weights, ξ; dir::Int)
 
-h-refinement. Insert the knot `ξ` once in parametric direction `dir` (Boehm).
+h-refinement: insert the knot value `ξ` once in parametric direction `dir`, using Boehm's
+algorithm [Piegl1997](@cite). The knot vector `knot_vectors[dir]`, the `control_points` and
+the `weights` are updated in-place such that the geometry is unchanged. Returns `nothing`.
+
+The arrays are those that define a [`NURBSMesh`](@ref) (and are e.g. obtained by copying the
+fields of an existing mesh). After refinement, create a new `NURBSMesh` from the arrays so
+that the element connectivity is updated.
+
+See [`knotinsertion`](@ref) for a version that operates on a `NURBSMesh`.
+
+# Examples
+```julia
+kv = (copy(mesh.knot_vectors[1]), copy(mesh.knot_vectors[2]))
+cp = copy(mesh.control_points)
+w = copy(mesh.weights)
+for ξ in (-0.5, 0.0, 0.5)
+    knotinsertion!(kv, mesh.orders, cp, w, ξ; dir = 1)
+end
+mesh = NURBSMesh(kv, mesh.orders, cp, w)
+```
 """
 function knotinsertion!(knot_vectors::NTuple{pdim,Vector{T}}, orders::NTuple{pdim,Int}, control_points::Vector{Vec{sdim,T}}, weights::Vector{T}, ξᴺ::T; dir::Int) where {pdim,sdim,T}
 
@@ -223,9 +302,15 @@ function knotinsertion!(knot_vectors::NTuple{pdim,Vector{T}}, orders::NTuple{pdi
 end
 
 """
-	orderelevation!(knot_vectors, orders, control_points, weights; dir)
+    orderelevation!(knot_vectors, orders, control_points, weights; dir::Int) -> orders
 
-p-refinement. Raise the polynomial degree by one in direction `dir`.
+p-refinement: raise the polynomial degree by one in parametric direction `dir`, using
+algorithm A5.9 of [Piegl1997](@cite). The knot vector `knot_vectors[dir]`, the
+`control_points` and the `weights` are updated in-place such that the geometry is
+unchanged. Since `orders` is a tuple, the new orders are returned.
+
+After refinement, create a new [`NURBSMesh`](@ref) from the arrays. See
+[`orderelevation`](@ref) for a version that operates on a `NURBSMesh`.
 """
 function orderelevation!(knot_vectors::NTuple{pdim,Vector{T}}, orders::NTuple{pdim,Int}, control_points::Vector{Vec{sdim,T}}, weights::Vector{T}; dir::Int) where {pdim,sdim,T}
 
@@ -426,10 +511,15 @@ function orderelevation!(knot_vectors::NTuple{pdim,Vector{T}}, orders::NTuple{pd
 end
 
 """
-	smoothnesselevation!(knot_vectors, orders, control_points, weights, new_knots; dir)
+    smoothnesselevation!(knot_vectors, orders, control_points, weights, new_knots; dir::Int) -> orders
 
-k-refinement. Raise the degree by one in direction `dir`, then insert each knot in `new_knots`.
-This is a pointwise smoothness elevation. 
+k-refinement: raise the degree by one in parametric direction `dir` with
+[`orderelevation!`](@ref), then insert each value of `new_knots` with
+[`knotinsertion!`](@ref). The new knots have continuity ``C^{p}``, where ``p`` is the
+original degree. The arrays are updated in-place, and the new orders are returned.
+
+After refinement, create a new [`NURBSMesh`](@ref) from the arrays. See
+[`smoothnesselevation`](@ref) for a version that operates on a `NURBSMesh`.
 """
 function smoothnesselevation!(knot_vectors::NTuple{pdim,Vector{T}}, orders::NTuple{pdim,Int}, control_points::Vector{Vec{sdim,T}}, weights::Vector{T}, new_knots::AbstractVector{T}; dir::Int) where {pdim,sdim,T}
 	orders = orderelevation!(knot_vectors, orders, control_points, weights; dir=dir)

@@ -9,10 +9,53 @@ function Ferrite.default_geometric_interpolation(::Bernstein{shape, order}) wher
 end
 
 """
-    BezierCellValues(qr, ip)
+    BezierCellValues([::Type{T},] quad_rule::QuadratureRule, func_interpol::Interpolation, [geom_interpol::Interpolation]; kwargs...)
 
-Shape values on an IGA cell. Call `reinit!(cv, coords)` first. Then `shape_value` and
-`shape_gradient` return NURBS values.
+A `BezierCellValues` object facilitates the process of evaluating values of shape functions,
+gradients of shape functions, values of nodal functions, gradients and divergences of nodal
+functions etc. in the quadrature points of an isogeometric cell. It is the isogeometric
+counterpart of Ferrite's `CellValues`, and is used in exactly the same way.
+
+The reference values are those of the Bernstein basis of the
+[`IGAInterpolation`](@ref). When the object is reinitialized for a cell with
+[`reinit!`](@ref reinit_bezier), the Bézier extraction operator and the NURBS weights of the
+cell are applied, such that after the call all functions (`shape_value`, `shape_gradient`,
+`shape_hessian`, `function_value`, `getdetJdV`, ...) return values of the B-spline or NURBS
+basis of the patch, mapped to the physical cell.
+
+Constructing a Ferrite `CellValues` with an [`IGAInterpolation`](@ref) also returns a
+`BezierCellValues`.
+
+**Arguments:**
+* `T`: an optional argument (default to `Float64`) to determine the type the internal data
+  is stored as.
+* `quad_rule`: an instance of a `QuadratureRule`.
+* `func_interpol`: an [`IGAInterpolation`](@ref), or a vectorized one (e.g. `ip^2`), used to
+  interpolate the approximated function.
+* `geom_interpol`: an optional `IGAInterpolation` used to interpolate the geometry. Defaults
+  to the scalar base of `func_interpol`.
+
+**Keyword arguments:** The following keyword arguments are experimental and may change in
+future minor releases
+* `update_gradients`: Specifies if the gradients of the shape functions should be updated
+  (default true)
+* `update_hessians`: Specifies if the hessians of the shape functions should be updated
+  (default false)
+* `update_detJdV`: Specifies if the volume associated with each quadrature point should be
+  updated (default true)
+
+# Examples
+```julia
+ip = IGAInterpolation{RefQuadrilateral, 2}()
+qr = QuadratureRule{RefQuadrilateral}(3)
+cv = BezierCellValues(qr, ip)
+
+reinit!(cv, getcoordinates(grid, cellid))
+dΩ = getdetJdV(cv, 1)
+∇N = shape_gradient(cv, 1, 1)
+```
+
+See the [BezierCellValues topic guide](@ref beziercellvalues_topicguide) for more details.
 """
 mutable struct BezierCellValues{FV, GM, QR, T, detJ} <: Ferrite.AbstractCellValues
     const bezier_values::FV # FunctionValues
@@ -25,9 +68,48 @@ mutable struct BezierCellValues{FV, GM, QR, T, detJ} <: Ferrite.AbstractCellValu
 end
 
 """
-    BezierFacetValues(fqr, ip)
+    BezierFacetValues([::Type{T},] quad_rule::FacetQuadratureRule, func_interpol::Interpolation, [geom_interpol::Interpolation]; kwargs...)
 
-Shape values on an IGA face. Call `reinit!(fv, coords, faceid)` first.
+A `BezierFacetValues` object facilitates the process of evaluating values of shape
+functions, gradients of shape functions, values of nodal functions, gradients and
+divergences of nodal functions etc. on the facets of an isogeometric cell. It is the
+isogeometric counterpart of Ferrite's `FacetValues`, and is used in exactly the same way.
+
+It is reinitialized for facet `facetnr` of a cell with
+`reinit!(fv, getcoordinates(grid, cellid), facetnr)`, see
+[`reinit!`](@ref reinit_bezier). After that, the values are those of the B-spline or NURBS
+basis, and `getnormal` returns the outward unit normal of the (curved) facet.
+
+Constructing a Ferrite `FacetValues` with an [`IGAInterpolation`](@ref) also returns a
+`BezierFacetValues`.
+
+**Arguments:**
+* `T`: an optional argument (default to `Float64`) to determine the type the internal data
+  is stored as.
+* `quad_rule`: an instance of a `FacetQuadratureRule`.
+* `func_interpol`: an [`IGAInterpolation`](@ref), or a vectorized one (e.g. `ip^2`), used to
+  interpolate the approximated function.
+* `geom_interpol`: an optional `IGAInterpolation` used to interpolate the geometry. Defaults
+  to the scalar base of `func_interpol`.
+
+**Keyword arguments:** The following keyword arguments are experimental and may change in
+future minor releases
+* `update_gradients`: Specifies if the gradients of the shape functions should be updated
+  (default true)
+* `update_hessians`: Specifies if the hessians of the shape functions should be updated
+  (default false)
+
+# Examples
+```julia
+ip = IGAInterpolation{RefQuadrilateral, 2}()
+fqr = FacetQuadratureRule{RefQuadrilateral}(3)
+fv = BezierFacetValues(fqr, ip)
+
+for (cellid, facetnr) in getfacetset(grid, "left")
+    reinit!(fv, getcoordinates(grid, cellid), facetnr)
+    # ...
+end
+```
 """
 mutable struct BezierFacetValues{FV, GM, FQR, dim, T, V_FV<:AbstractVector{FV}, V_GM<:AbstractVector{GM}} <: Ferrite.AbstractFacetValues
     const bezier_values::V_FV # FunctionValues
@@ -162,15 +244,23 @@ function Ferrite.set_current_facet!(fv::BezierFacetValues, face_nr::Int)
 end
 
 """
-	set_bezier_operator!(cv, beo)
-	set_bezier_operator!(cv, beo, w)
+    set_bezier_operator!(cv::Union{BezierCellValues, BezierFacetValues}, beo::BezierExtractionOperator)
+    set_bezier_operator!(cv::Union{BezierCellValues, BezierFacetValues}, beo::BezierExtractionOperator, w::Vector)
 
-Set the current Bézier extraction operator on a `BezierCellValues` or
-`BezierFacetValues`. When NURBS weights `w` are given, they are stored and
-used in `reinit!` to form the rational basis.
+Set the Bézier extraction operator `beo` of the current cell, and optionally the NURBS
+weights `w` of the cell, in `cv`. They are used by the next call to
+`reinit!(cv, (xb, wb))` to transform the Bernstein basis into the NURBS basis.
 
-Prefer `reinit!(cv, getcoordinates(grid, cellid))`, which sets the operator
-from `BezierCoords` automatically. This method is for manual assembly loops.
+This is only needed when calling `reinit!` with the Bézier control points and weights
+directly. The recommended `reinit!(cv, getcoordinates(grid, cellid))` takes the operator and
+weights from the [`BezierCoords`](@ref) and calls `set_bezier_operator!` internally.
+
+# Examples
+```julia
+xb, wb, x, w = get_bezier_coordinates(grid, cellid)
+set_bezier_operator!(cv, get_extraction_operator(grid, cellid), w)
+reinit!(cv, (xb, wb))
+```
 """
 function set_bezier_operator!(bcv::BezierCellAndFacetValues, beo::BezierExtractionOperator{T}) where T 
     bcv.current_beo=beo

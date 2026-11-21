@@ -1,74 +1,116 @@
 # FerriteIGA.jl
 
-Isogeometric analysis in the [Ferrite](https://github.com/Ferrite-FEM/Ferrite.jl) finite element library.
+Welcome to the documentation for FerriteIGA.jl! FerriteIGA is an extension of the
+[Ferrite.jl](https://github.com/Ferrite-FEM/Ferrite.jl) finite element toolbox for
+*isogeometric analysis* (IGA). It provides spline (B-spline and NURBS) geometries and
+basis functions, and makes them available through the same interface as standard finite
+elements in Ferrite. Programs written with FerriteIGA therefore look almost exactly like
+Ferrite programs: degrees of freedom, boundary conditions, assembly and post-processing all
+work in the same way.
 
-The basis is a B-spline or NURBS space, the same functions used for CAD geometry. Degrees of freedom, constraints, and assembly use the Ferrite interface. Bézier extraction converts the splines into Bernstein polynomials so the geometry works with a standard finite element code.
+!!! note
+    Please help improve this documentation -- if something confuses you, chances are you're
+    not alone. It's easy to do as you read along: just click on the "Edit on GitHub" link at
+    the top of each page, and then [edit the files directly in your browser](https://help.github.com/articles/editing-files-in-another-user-s-repository/).
+    Your changes will be vetted by developers before becoming permanent, so don't worry
+    about whether you might say something wrong.
 
-The [Splines](@ref), [Meshes](@ref), and [Bezier extraction](@ref) pages expand the topics below. Examples include the [Infinite plate with hole](@ref), [structural vibrations](@ref structural_vibrations) of an elastic rod, and a [Kirchhoff plate](@ref kirchhoff_plate).
+## How the documentation is organized
+
+This high level view of the documentation structure will help you find what you are looking
+for. The document is organized as follows[^1]:
+
+ - [**Getting started**](getting_started.md) summarizes how an isogeometric program differs
+   from a Ferrite program, and is the best place to start.
+ - [**Tutorials**](tutorials/index.md) are thoroughly documented examples which guide you
+   through the process of solving partial differential equations using FerriteIGA.
+ - [**Topic guides**](topics/index.md) contain more in-depth explanations and discussions
+   about isogeometric analysis concepts, and specifically how these are realized in
+   FerriteIGA.
+ - [**API reference**](reference/index.md) contains the technical API reference of functions
+   and types (e.g. the documentation strings).
+ - [**How-to guides**](howto/index.md) will guide you through the steps involved in
+   addressing common tasks and use-cases. These usually build on top of the tutorials and
+   thus assume basic knowledge of how FerriteIGA works.
+
+[^1]: The organization of the document follows the [Diátaxis Framework](https://diataxis.fr),
+    in the same way as the [Ferrite documentation](https://ferrite-fem.github.io/Ferrite.jl/stable/).
+
+In addition, the document contains [**Developer documentation**](devdocs/index.md), which
+documents the internals of FerriteIGA, and a list of [**Cited literature**](cited-literature.md).
+
+Since FerriteIGA builds on Ferrite, the
+[Ferrite documentation](https://ferrite-fem.github.io/Ferrite.jl/stable/) is a useful
+companion. In particular, it is recommended to be familiar with the first Ferrite tutorial,
+[Heat equation](https://ferrite-fem.github.io/Ferrite.jl/stable/tutorials/heat_equation/),
+before reading this documentation.
 
 ## Isogeometric analysis
 
-Hughes, Cottrell, and Bazilevs (2005) introduced isogeometric analysis as a Galerkin method whose basis is taken from CAD, consisting of B-splines and eventually non-uniform rational B-splines (Cottrell, Hughes, and Bazilevs, *Isogeometric Analysis* (Wiley, 2009)). A NURBS patch used for design is then available as an analysis mesh. NURBS can represent curved and conic sections such as cylinders, spheres, and circles exactly.
+Isogeometric analysis was introduced by [Hughes2005](@citet) as a Galerkin method whose
+basis functions are taken from computer aided design (CAD): B-splines and non-uniform
+rational B-splines (NURBS) [Cottrell2009](@cite). The idea is to use the *same* functions to
+describe the geometry and to approximate the solution, which gives the method its name.
+This has a number of consequences:
 
-Continuity is built into the knot vector, and the increased smoothness of IGA is a significant difference from standard finite elements. 
+ - **Exact geometry.** A geometry designed in CAD is described exactly by the analysis
+   model, already on the coarsest mesh. NURBS represent conic sections such as circles,
+   cylinders and spheres exactly, so for example the circular hole in the
+   [Infinite plate with hole](@ref tutorial-plate-with-hole) tutorial is exact, and the
+   geometry is unchanged when the mesh is refined.
+ - **Higher continuity.** The smoothness of a spline basis is set by its knot vector. A
+   spline of degree ``p`` is, in general, ``C^{p-1}``-continuous between elements, whereas
+   standard finite elements are only ``C^0``. Stresses and strains are therefore continuous
+   inside a patch, and problems that need second derivatives of the unknown, such as the
+   [Kirchhoff plate](@ref kirchhoff_plate), can be discretized directly with a quadratic
+   basis.
+ - **Better spectral properties.** For the same number of degrees of freedom, smooth spline
+   spaces approximate the eigenvalues and eigenmodes of a problem considerably better than
+   ``C^0`` finite elements, whose higher frequencies diverge from the exact ones
+   [Cottrell2006](@cite). This is shown in the [Structural vibrations](@ref structural_vibrations)
+   tutorial.
+ - **Flexible refinement.** A mesh can be refined by inserting knots (h-refinement), by
+   raising the degree (p-refinement), or by a combination that raises both the degree and the
+   continuity (k-refinement), without changing the geometry.
 
-In linear elasticity the stress comes from derivatives of the displacement. In a standard $C^0$ mesh these derivatives jump at element edges, which affects stress concentrations and bending curvature. A higher-order smoothness patch keeps strains and stresses continuous inside the patch. Thin plates and shells that use second derivatives of the displacement need at least continuity $C^1$. See the [Kirchhoff plate](@ref kirchhoff_plate) for bending. The [Infinite plate with hole](@ref) is a plane-stress problem with a circular hole that NURBS represent exactly.
-
-The same smoothness provides another advantage in the eigenvalue spectrum and vibration problems. Cottrell et al. (2006) showed that the spline discretization produces an eigenvalue/frequency spectrum closer to the exact spectrum of the problem than a $C^0$ finite element space of the same degree, which drifts once the mode number exceeds about half the number of degrees of freedom. The [structural vibrations](@ref structural_vibrations) example shows the vibration spectrum of IGA.
-
-The mesh can undergo knot insertion (h-refinement), order elevation (p-refinement), or a combination of both to increase smoothness (k-refinement).
-
-## Bézier extraction
-
-Spline functions overlap several neighbouring elements. A finite element code expects shape functions on a single cell. Bézier extraction (Borden, Scott, Evans, and Hughes, 2011) converts the B-spline or NURBS basis on each element into Bernstein polynomials. Those polynomials are local to the cell and $C^0$, so the isogeometric geometry can be used in Ferrite.
+A spline basis function is non-zero over several neighboring elements, which does not fit
+directly into a finite element code that evaluates shape functions element by element.
+FerriteIGA uses *Bézier extraction* [Borden2011](@cite) to overcome this: on each element the
+spline basis is written as a linear combination of Bernstein polynomials, which are defined
+on a single reference element exactly like standard finite element shape functions. This is
+what allows Ferrite's machinery to be reused, and is explained in the
+[BezierGrid](@ref beziergrid_topicguide) and
+[BezierCellValues](@ref beziercellvalues_topicguide) topic guides.
 
 ## Installation
 
-From the Pkg REPL,
+To use FerriteIGA you first need to install Julia, see <https://julialang.org/> for details.
+Installing FerriteIGA can then be done from the Pkg REPL; press `]` at the `julia>` prompt
+to enter `pkg>` mode:
 
 ```
 pkg> add FerriteIGA
 ```
 
-Ferrite is installed as a dependency.
-
-## Quick start
-
-Generate a NURBS patch, convert it to a Bézier mesh, and build cell values.
+This will install FerriteIGA and all necessary dependencies, including Ferrite. Press
+backspace to get back to the `julia>` prompt. Finally, to load FerriteIGA, use
 
 ```julia
-using Ferrite, FerriteIGA
-
-order = 2 # second order NURBS
-nels = (20, 10) # number of elements
-patch = generate_nurbs_patch(:plate_with_hole, nels, order)
-
-# Convert the NURBS patch to a grid with Bézier extraction operators
-grid = BezierGrid(patch)
-
-# Interpolation and shape values (Bernstein polynomials)
-ip = IGAInterpolation{RefQuadrilateral, order}()
-qr = QuadratureRule{RefQuadrilateral}(4)
-cv = BezierCellValues(qr, ip)
-
-# Update cell values
-coords = getcoordinates(grid, 1)
-reinit!(cv, coords)
+using FerriteIGA
 ```
 
-`reinit!` applies the extraction. After that call, `DofHandler`, `ConstraintHandler`, and assembly follow the [Ferrite documentation](https://ferrite-fem.github.io/Ferrite.jl/stable/).
+FerriteIGA re-exports Ferrite (and Tensors), so `using Ferrite` is not needed. You are now
+all set to start using FerriteIGA!
 
-A uniform box can also be built with `generate_grid` and a `BezierCell`.
+### Getting help
 
-```julia
-grid = generate_grid(BezierCell{RefLine, 2}, (10,), Vec(0.0), Vec(1.0))
-```
+If you have questions about FerriteIGA it is suggested to use the `#ferrite-fem` channel on
+the [Julia Slack](https://julialang.org/slack/), or the `#Ferrite.jl` stream on
+[Zulip](https://julialang.zulipchat.com/). Alternatively you can open an
+[issue](https://github.com/Ferrite-FEM/FerriteIGA.jl/issues) on the GitHub repository.
 
-`generate_nurbs_patch` also provides lines, rectangles, cubes, rings, cylindrical sectors, a plate with a circular hole, and several singly and doubly curved shells. The full list is on the [Meshes](@ref) page.
+## Contributing to FerriteIGA
 
-## References
-
-- T. J. R. Hughes, J. A. Cottrell, and Y. Bazilevs. Isogeometric analysis. CAD, finite elements, NURBS, exact geometry and mesh refinement. *Comput. Methods Appl. Mech. Engrg.*, 194:4135–4195, 2005. [doi:10.1016/j.cma.2004.10.008](https://doi.org/10.1016/j.cma.2004.10.008)
-- J. A. Cottrell, A. Reali, Y. Bazilevs, and T. J. R. Hughes. Isogeometric analysis of structural vibrations. *Comput. Methods Appl. Mech. Engrg.*, 195:5257–5296, 2006. [doi:10.1016/j.cma.2005.09.027](https://doi.org/10.1016/j.cma.2005.09.027)
-- M. J. Borden, M. A. Scott, J. A. Evans, and T. J. R. Hughes. Isogeometric finite element data structures based on Bézier extraction of NURBS. *Int. J. Numer. Meth. Engng.*, 87:15–47, 2011. [doi:10.1002/nme.2968](https://doi.org/10.1002/nme.2968)
-- J. A. Cottrell, T. J. R. Hughes, and Y. Bazilevs. *Isogeometric Analysis. Toward Integration of CAD and FEA*. Wiley, 2009. [doi:10.1002/9780470749081](https://doi.org/10.1002/9780470749081)
+FerriteIGA is still under active development. If you find a bug, or have ideas for
+improvements, you are encouraged to interact with the developers on the
+[FerriteIGA GitHub repository](https://github.com/Ferrite-FEM/FerriteIGA.jl).

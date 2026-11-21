@@ -1,10 +1,28 @@
 """
-	IGACellCache(dh::DofHandler)
-	IGACellCache(dh::DofHandler, flags::UpdateFlags)
+    IGACellCache(dh::DofHandler, flags::UpdateFlags = UpdateFlags())
 
-Ferrite-style cell cache for a `BezierGrid`. After `reinit!(cache, cellid)`,
-use `getcoordinates(cache)` for `BezierCoords`, `celldofs(cache)`, and
-`getnodes(cache)` like Ferrite's `CellCache`.
+The isogeometric counterpart of Ferrite's `CellCache`, for a `DofHandler` defined on a
+[`BezierGrid`](@ref). It holds pre-allocated storage for the data of one cell, and is
+updated for cell `cellid` with `reinit!(cache, cellid)`. After that, the following
+functions can be used:
+
+ - `getcoordinates(cache)`: the [`BezierCoords`](@ref) of the cell,
+ - `celldofs(cache)`: the global degrees of freedom of the cell,
+ - `getnodes(cache)`: the node (control point) indices of the cell,
+ - `cellid(cache)`: the index of the cell.
+
+`flags` determines which of the data is updated, see Ferrite's `UpdateFlags`.
+
+# Examples
+```julia
+cc = IGACellCache(dh)
+for cellid in 1:getncells(grid)
+    reinit!(cc, cellid)
+    reinit!(cellvalues, getcoordinates(cc))
+    assemble_element!(ke, cellvalues)
+    assemble!(assembler, celldofs(cc), ke)
+end
+```
 """
 struct IGACellCache{X,G<:Ferrite.AbstractGrid,DH<:Union{Ferrite.AbstractDofHandler,Nothing}}
     flags::UpdateFlags
@@ -56,12 +74,12 @@ Ferrite.cellid(cc::IGACellCache) = cc.cellid[]
 
 
 """
-	IGAFaceCache(dh::DofHandler)
-	IGAFaceCache(dh::DofHandler, flags::UpdateFlags)
+    IGAFaceCache(dh::DofHandler, flags::UpdateFlags = UpdateFlags())
 
-Facet cache for a `BezierGrid`. After
-`reinit!(cache, FacetIndex(cellid, faceid))`, coordinate and dof accessors 
-are delegated to the [`IGACellCache`](@ref).
+The isogeometric counterpart of Ferrite's `FacetCache`, for a `DofHandler` defined on a
+[`BezierGrid`](@ref). It is updated with `reinit!(cache, FacetIndex(cellid, facetnr))`,
+after which `getcoordinates`, `celldofs`, `getnodes` and `cellid` return the data of the
+cell that the facet belongs to, see [`IGACellCache`](@ref).
 """
 struct IGAFaceCache{CC}
     cc::CC  # const for julia > 1.8

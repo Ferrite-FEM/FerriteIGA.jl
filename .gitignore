@@ -1,5 +1,6 @@
 docs/build/
-docs/src/examples/
+docs/src/tutorials/*
+!docs/src/tutorials/index.md
 *.vtu
 *.vtk
 Manifest.toml
