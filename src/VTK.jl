@@ -27,9 +27,36 @@ let cache = Dict{Type{<:BezierCell}, Vector{Int}}()
 end
 
 """
-    VTKIGAFile(filename, grid::BezierGrid)
+    VTKIGAFile(filename::String, grid::BezierGrid; kwargs...)
+    VTKIGAFile(f::Function, filename::String, grid::BezierGrid; kwargs...)
 
-Write a `BezierGrid` to a `.vtu` file.
+Create a VTK file (`.vtu`) for visualizing a [`BezierGrid`](@ref) and data on it, e.g. in
+[ParaView](https://www.paraview.org/). It is the isogeometric counterpart of Ferrite's
+`VTKGridFile`, and is used in the same way.
+
+Every cell is written as a VTK *Bézier* cell (`VTK_BEZIER_CURVE`,
+`VTK_BEZIER_QUADRILATERAL` or `VTK_BEZIER_HEXAHEDRON`), defined by the Bézier control points
+and weights of the cell, so the exact (curved) geometry is represented. Since the Bézier
+control points are local to each cell, the VTK grid is discontinuous: every cell has its own
+copy of its points.
+
+Data is added with `write_solution`, `write_projection`, `write_node_data` and
+`write_cell_data`, as for a `VTKGridFile`. Solution fields and projections are evaluated
+in each cell at the reference coordinates of the Bernstein basis (the equidistant points
+of the [`IGAInterpolation`](@ref)), and these values are attached to the points of the
+cell. Keyword arguments are passed on to `WriteVTK.vtk_grid`.
+
+The file is written to disk when it is closed, either explicitly with `close(vtk)` or at the
+end of the `do`-block.
+
+# Examples
+```julia
+VTKIGAFile("solution.vtu", grid) do vtk
+    write_solution(vtk, dh, u)
+end
+```
+
+See the [Export topic guide](@ref export_topicguide) for more details.
 """
 struct VTKIGAFile{VTK <: WriteVTK.DatasetFile}
     vtk::VTK

@@ -190,3 +190,12 @@ fig = contourf(range(0, a; length=nplot), range(0, a; length=nplot), W;
 
 using Test #src
 @test abs(w_center - w_ref) / abs(w_ref) < 0.05 #src
+
+#md # ## [Plain program](@id kirchhoff_plate-plain-program)
+#md #
+#md # Here follows a version of the program without any comments.
+#md # The file is also available here: [`kirchhoff_plate.jl`](kirchhoff_plate.jl).
+#md #
+#md # ```julia
+#md # @__CODE__
+#md # ```

@@ -1,4 +1,4 @@
-# # Infinite plate with hole
+# # [Infinite plate with hole](@id tutorial-plate-with-hole)
 #
 # ![](plate_with_hole.png)
 #-
@@ -17,7 +17,7 @@ using Ferrite, FerriteIGA, LinearAlgebra
 # Next we define the functions for the integration of the element stiffness matrix and traction force.
 # These functions will be the same as for a normal finite elment problem, but
 # with the difference that we need the cell coorinates AND cell weights (the weights from the NURBS shape functions), to reinitilize the shape values, dNdx.
-# See [Bezier extraction](@ref) for how the shape values are reinitialized. 
+# See the [BezierCellValues topic guide](@ref beziercellvalues_topicguide) for how the shape values are reinitialized. 
 function integrate_element!(ke::AbstractMatrix, C::SymmetricTensor{4,2}, cv)
     n_basefuncs = getnbasefunctions(cv)
 
@@ -204,3 +204,12 @@ VTKIGAFile("plate_with_hole.vtu", grid) do vtk
     write_solution(vtk, dh, u)
     write_projection(vtk, projector, σ_nodes, "σ")
 end;
+
+#md # ## [Plain program](@id plate_with_hole-plain-program)
+#md #
+#md # Here follows a version of the program without any comments.
+#md # The file is also available here: [`plate_with_hole.jl`](plate_with_hole.jl).
+#md #
+#md # ```julia
+#md # @__CODE__
+#md # ```

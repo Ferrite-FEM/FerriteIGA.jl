@@ -77,11 +77,69 @@ function Ferrite.generate_grid(::Type{<:BezierCell{RefHexahedron,order}}, nels::
 end
 
 """
-    generate_nurbs_patch(name, nels, order; kwargs...)
+    generate_nurbs_patch(name::Symbol, nels::NTuple{pdim, Int}, order::Int; kwargs...)
+    generate_nurbs_patch(name::Symbol, nels::NTuple{pdim, Int}, orders::NTuple{pdim, Int}; kwargs...)
 
-Build a NURBS patch. `name` is the geometry (`:plate_with_hole`, `:rectangle`, `:ring`, ...).
-`nels` is how many elements in each direction. `order` is the degree.
-The Meshes page lists every name and keyword.
+Generate a single-patch [`NURBSMesh`](@ref) of the geometry `name`, with `nels[d]`
+elements and polynomial degree `orders[d]` in parametric direction `d`. If a single `order`
+is given, it is used in all directions. The knot vectors are open and defined on
+``[-1, 1]``, with uniformly spaced interior knots.
+
+The patch is converted to a grid for analysis with [`BezierGrid`](@ref). No facet or node
+sets are defined; add them with `addfacetset!` and `addnodeset!` on the grid.
+
+# Geometries
+
+**Lines, rectangles and boxes.** Straight patches with a linear parametrization.
+
+| `name`                | `pdim` | Keyword arguments |
+|:----------------------|:-------|:------------------|
+| `:line`               | 1      | `size`, `cornerpos = (0.0,)`, `multiplicity = (1,)`, `sdim = 1` |
+| `:rectangle`          | 2      | `size`, `cornerpos = (0.0, 0.0)`, `multiplicity = (1, 1)`, `sdim = 2` |
+| `:cube`               | 3      | `size = (2.0, 2.0, 2.0)`, `cornerpos = (-1.0, -1.0, -1.0)`, `multiplicity = (1, 1, 1)` |
+| `:hypercube`          | 1, 2, 3 | as `:line`, `:rectangle` and `:cube` |
+
+`cornerpos` is the corner with the smallest coordinates and `size` the side lengths.
+`multiplicity` is the multiplicity of the interior knots in each direction, which gives
+continuity ``C^{p-m}`` between elements. `sdim` embeds a line or rectangle in a higher
+spatial dimension.
+
+**Curved patches.** These are B-splines (all weights equal to one) whose control points are
+placed on an arc, so the geometry approximates, but does not exactly represent, the arc.
+
+| `name`                 | `pdim` | `sdim` | Keyword arguments |
+|:-----------------------|:-------|:-------|:------------------|
+| `:singly_curved_beam`  | 1      | 2      | `α`, `R`, `multiplicity` |
+| `:singly_curved`       | 2      | 2      | `α`, `R`, `thickness`, `multiplicity` |
+| `:singly_curved`       | 3      | 3      | `α`, `R`, `width`, `thickness`, `multiplicity` |
+| `:singly_curved_shell` | 2      | 3      | `α`, `R`, `width`, `multiplicity` |
+| `:doubly_curved`       | 2      | 3      | `r1`, `r2`, `α1`, `α2`, `multiplicity` |
+
+Here `α` is the opening angle and `R` the radius of the arc.
+
+**Exact conic geometries.** These are NURBS patches which represent circular arcs exactly.
+The degree must be 2.
+
+| `name`             | `pdim` | Restrictions on `nels` | Keyword arguments |
+|:-------------------|:-------|:-----------------------|:------------------|
+| `:plate_with_hole` | 2      | `nels[1]` even         | — |
+| `:ring`            | 2      | `nels == (4, 1)`       | `ri`, `ro` |
+| `:cylinder_sector` | 3      | `nels[2]` even and `> 2`, `nels[3] > 1` | `L`, `r`, `x0 = -L/2` |
+
+`:plate_with_hole` is a quarter of a square plate with side 4 and a circular hole with radius
+1 centered at the origin, occupying ``[-4, 0] \\times [0, 4]``. `:ring` is a full circular
+ring with inner radius `ri` and outer radius `ro`. `:cylinder_sector` is a solid half
+cylinder with radius `r` and length `L`, with its axis along ``x`` starting at `x0`.
+
+# Examples
+```julia
+mesh = generate_nurbs_patch(:rectangle, (8, 4), 2; size = (2.0, 1.0))
+mesh = generate_nurbs_patch(:plate_with_hole, (20, 10), 2)
+mesh = generate_nurbs_patch(:ring, (4, 1), 2; ri = 1.0, ro = 2.0)
+grid = BezierGrid(mesh)
+```
+
+See the [NURBSMesh topic guide](@ref nurbsmesh_topicguide) for figures of the geometries.
 """
 function generate_nurbs_patch(s::Symbol, nel::NTuple{N,Int}, order::Int; kwargs...) where N
 	orders = ntuple(i->order, N)

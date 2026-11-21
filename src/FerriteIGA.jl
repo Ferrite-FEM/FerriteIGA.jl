@@ -23,7 +23,20 @@ const CoordsAndWeight{sdim,T} = Tuple{ <: AbstractVector{Vec{sdim,T}}, <: Abstra
 """
     BezierExtractionOperator{T}
 
-Represent the Bézier extraction operator for an element, used to map between the local Bernstein polynomial basis and the global B-spline or NURBS basis.
+The Bézier extraction operator ``\\mathbf{C}^e`` of one cell. It expresses the B-spline
+basis functions that are non-zero on the cell as linear combinations of the Bernstein
+polynomials of the same degree,
+
+```math
+\\mathbf{N}^e(\\boldsymbol{\\xi}) = \\mathbf{C}^e \\mathbf{B}(\\boldsymbol{\\xi}).
+```
+
+The operator is stored row-wise (one sparse vector per B-spline basis function on the
+cell) in the field `C`. It is computed from the knot vectors when a [`BezierGrid`](@ref) is
+created from a [`NURBSMesh`](@ref), and is obtained for a cell with
+[`get_extraction_operator`](@ref) or as the `beo` field of a [`BezierCoords`](@ref).
+
+See the [BezierGrid topic guide](@ref beziergrid_topicguide) for more details.
 """
 struct BezierExtractionOperator{T}
     C::Vector{SparseVector{T,Int}} #TODO: Consider changing this to SparseMatrixCSR instead
@@ -32,12 +45,30 @@ end
 include("exports.jl")
 
 """
-    BezierCoords
+    BezierCoords{sdim, T}
 
-Data for one cell, from `getcoordinates`.
-`x`, `w` are the NURBS points and weights.
-`xb`, `wb` are the Bézier points and weights.
-`beo` is the extraction operator.
+The geometric data of one cell of a [`BezierGrid`](@ref), returned by
+`getcoordinates(grid::BezierGrid, cellid)`. In a standard Ferrite program
+`getcoordinates` returns a vector of node coordinates; for an isogeometric cell more
+information is needed to [`reinit!`](@ref reinit_bezier) a [`BezierCellValues`](@ref), and
+`BezierCoords` bundles all of it:
+
+ - `x::Vector{Vec{sdim,T}}`: the NURBS control points of the cell,
+ - `w::Vector{T}`: the NURBS weights of the cell,
+ - `xb::Vector{Vec{sdim,T}}`: the Bézier control points of the cell,
+ - `wb::Vector{T}`: the Bézier weights of the cell,
+ - `beo`: the [`BezierExtractionOperator`](@ref) of the cell (or `nothing` for cells
+   without one).
+
+A `BezierCoords` can be passed directly to `reinit!`:
+
+```julia
+coords = getcoordinates(grid, cellid)
+reinit!(cellvalues, coords)
+```
+
+A pre-allocated `BezierCoords` can be updated in-place with
+`getcoordinates!(coords, grid, cellid)`.
 """
 mutable struct BezierCoords{dim_s,T} 
     const xb::Vector{Vec{dim_s,T}}
@@ -60,10 +91,31 @@ zero_bezier_coord(dim, T, nnodes) = BezierCoords{dim,T}(zeros(Vec{dim,T}, nnodes
 #Base.zero(Type{BezierCoords{dim,T}}) where {dim,T} = BezierCoords
 
 """
-    IGAInterpolation{shape, order}()
+    IGAInterpolation{refshape, order}()
 
-Bernstein basis of degree `order` on `shape` (`RefLine`, `RefQuadrilateral`, or `RefHexahedron`).
-Use with `BezierCellValues`. For a 2D vector unknown write `ip^2`.
+The interpolation used for isogeometric analysis with FerriteIGA. On the reference cell it
+is the tensor-product Bernstein basis of degree `order` on `refshape` (`RefLine`,
+`RefQuadrilateral` or `RefHexahedron`). Combined with the Bézier extraction operators
+stored in a [`BezierGrid`](@ref), it represents the B-spline or NURBS basis of the patch.
+
+`IGAInterpolation` is used wherever a Ferrite interpolation (e.g. `Lagrange`) is used in a
+standard Ferrite program: when adding fields to a `DofHandler`, and when constructing
+[`BezierCellValues`](@ref) and [`BezierFacetValues`](@ref). Use `ip^dim` to obtain a
+vector-valued interpolation.
+
+The order must match the order of the cells of the grid, and is currently the same in all
+parametric directions.
+
+# Examples
+```julia
+ip = IGAInterpolation{RefQuadrilateral, 2}()  # scalar, quadratic
+ip_u = ip^2                                   # vector-valued, quadratic
+dh = DofHandler(grid)
+add!(dh, :u, ip_u)
+close!(dh)
+```
+
+See the [BezierCellValues topic guide](@ref beziercellvalues_topicguide) for more details.
 """
 struct IGAInterpolation{shape, order} <: Ferrite.ScalarInterpolation{shape, order}
     function IGAInterpolation{shape,order}() where {rdim, shape<:RefHypercube{rdim}, order} 
@@ -96,9 +148,23 @@ Ferrite.dirichlet_edgedof_indices(::IGAInterpolation{shape, order}) where {shape
 
 
 """
-    BezierCell{shape, order}(nodes)
+    BezierCell{refshape, order}(nodes::NTuple{N, Int})
 
-One cell of a `BezierGrid`. `nodes` are control-point numbers. `order` is the degree.
+A cell of a [`BezierGrid`](@ref), i.e. one non-empty knot span of a spline patch, with
+reference shape `refshape` (`RefLine`, `RefQuadrilateral` or `RefHexahedron`) and polynomial
+degree `order`. The `nodes` are the indices of the `N = (order + 1)^dim` control points
+whose basis functions are non-zero on the cell, ordered according to the Bernstein basis of
+[`IGAInterpolation`](@ref).
+
+Unlike a Lagrange cell, neighboring `BezierCell`s share several layers of nodes, reflecting
+the higher continuity of the spline basis.
+
+`BezierCell` can be passed to Ferrite's `generate_grid` to create a uniform B-spline grid of
+a line, rectangle or box directly:
+
+```julia
+grid = generate_grid(BezierCell{RefQuadrilateral, 2}, (10, 10), Vec((0.0, 0.0)), Vec((1.0, 1.0)))
+```
 """
 struct BezierCell{refshape,order,N} <: Ferrite.AbstractCell{refshape}
     nodes::NTuple{N,Int}
